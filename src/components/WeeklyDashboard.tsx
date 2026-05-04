@@ -21,7 +21,8 @@ import Chart from './Chart';
 import Leaderboard from './Leaderboard';
 import HabitRegistry from './HabitRegistry';
 import HabitGrid from './HabitGrid';
-import { Sparkles, Zap, Shield, Flame } from 'lucide-react';
+import DistributionChart from './DistributionChart';
+import { Sparkles, Zap, Shield, Flame, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface WeeklyDashboardProps {
@@ -250,6 +251,24 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
 
   const weeklyConsistency = totalPossibleHabitCompletions > 0 ? completedHabitCount / totalPossibleHabitCompletions : 0;
 
+  // XP Distribution by Difficulty
+  const difficultyXp = { easy: 0, medium: 0, hard: 0 };
+  Object.values(weekCompletions).forEach((day: DayCompletion) => {
+    if (day.completions) {
+      habits.forEach(h => {
+        if (day.completions[h.id]) {
+          difficultyXp[h.difficulty] += (h.xpValue || 0);
+        }
+      });
+    }
+  });
+
+  const difficultyChartData = [
+    { name: 'Easy', value: difficultyXp.easy, color: '#3B82F6' },
+    { name: 'Medium', value: difficultyXp.medium, color: '#8B5CF6' },
+    { name: 'Hard', value: difficultyXp.hard, color: '#EC4899' }
+  ].filter(d => d.value > 0);
+
   const chartData = currentWeekDays.map(d => {
     const ds = format(d, 'yyyy-MM-dd');
     const dayComp = weekCompletions[ds];
@@ -298,7 +317,7 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="lg:col-span-12 xl:col-span-7 2xl:col-span-8 glass-card rounded-[2rem] sm:rounded-3xl p-5 sm:p-8 relative overflow-hidden"
+          className="lg:col-span-12 xl:col-span-4 2xl:col-span-5 glass-card rounded-[2rem] sm:rounded-3xl p-5 sm:p-8 relative overflow-hidden"
         >
           <div className="absolute -top-12 -left-12 w-32 h-32 bg-accent/10 blur-[80px] rounded-full" />
           
@@ -319,6 +338,27 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
           
           <div className="h-[200px] sm:h-[280px] w-full relative z-10">
             <Chart data={chartData} />
+          </div>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="lg:col-span-12 xl:col-span-3 2xl:col-span-3 glass-card rounded-[2rem] sm:rounded-3xl p-5 sm:p-8 relative overflow-hidden"
+        >
+          <div className="absolute -top-12 -right-12 w-32 h-32 bg-purple-500/10 blur-[80px] rounded-full" />
+          
+          <div className="mb-6 sm:mb-8 relative z-10">
+            <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
+              <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 animate-pulse" />
+              <h2 className="text-[8px] sm:text-xs font-black text-white/40 uppercase tracking-[0.25em] sm:tracking-[0.3em]">Complexity Spectrum</h2>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tighter italic uppercase">XP Distribution</h1>
+          </div>
+
+          <div className="h-[200px] sm:h-[280px] w-full relative z-10">
+            <DistributionChart data={difficultyChartData} />
           </div>
         </motion.div>
 

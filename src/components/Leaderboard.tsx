@@ -4,11 +4,14 @@ import {
   onSnapshot, 
   query, 
   where,
-  doc
+  doc,
+  deleteDoc,
+  getDoc,
+  runTransaction
 } from 'firebase/firestore';
-import { db } from '../firebase';
-import { UserProfile, DayCompletion, Habit } from '../types';
-import { Trophy, Crown, Zap, Flame, Shield } from 'lucide-react';
+import { db, auth } from '../firebase';
+import { UserProfile, DayCompletion, Habit, Group } from '../types';
+import { Trophy, Crown, Zap, Flame, Shield, Trash2, UserMinus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, getDaysOfWeek } from '../lib/utils';
 import Avatar from './Avatar';
@@ -64,6 +67,33 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
 
     const totalPossible = habits.length * 7;
     return (completedCount / totalPossible) * 100;
+  };
+
+  const handleRemoveMember = async (targetUid: string) => {
+    if (!window.confirm("Remove this operative from the group? All their local group data will be purged.")) return;
+
+    try {
+      // 1. Remove from group's nested users collection
+      const groupUserRef = doc(db, 'groups', groupId, 'users', targetUid);
+      await deleteDoc(groupUserRef);
+
+      // 2. Update group's members array
+      const groupRef = doc(db, 'groups', groupId);
+      await runTransaction(db, async (transaction) => {
+        const groupSnap = await transaction.get(groupRef);
+        if (groupSnap.exists()) {
+          const data = groupSnap.data() as Group;
+          const newMembers = (data.members || []).filter(m => m !== targetUid);
+          transaction.update(groupRef, { members: newMembers });
+        }
+      });
+      
+      // Note: In a real app, you'd also clear the user's groupId in their profile,
+      // but that requires permissions. This handles the group-side removal.
+    } catch (error) {
+      console.error("Failed to remove member:", error);
+      alert("System Error: Unauthorized or Network failure.");
+    }
   };
 
   useEffect(() => {
@@ -223,8 +253,18 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
                       <Crown className="w-10 h-10 text-accent fill-accent/20 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]" />
                     </div>
                   )}
+
+                  {!isRank1 && auth.currentUser?.uid !== entry.uid && (
+                    <button
+                      onClick={() => handleRemoveMember(entry.uid)}
+                      className="absolute top-4 right-4 p-2 bg-red-500/10 hover:bg-red-500/20 text-red-500/40 hover:text-red-500 rounded-xl border border-red-500/10 transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100 z-20"
+                      title="Remove Member"
+                    >
+                      <UserMinus className="w-4 h-4" />
+                    </button>
+                  )}
                   
-                  <div className="flex items-center gap-5">
+                  <div className="flex flex-col sm:flex-row items-center sm:items-center gap-5">
                     <div className="relative shrink-0">
                       <Avatar 
                         avatar={entry.avatar}
@@ -242,11 +282,11 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
                       </div>
                     </div>
                     
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 text-center sm:text-left">
                       <h4 className="text-lg font-black tracking-tighter truncate italic uppercase text-white mb-0.5">
                         {entry.displayName || entry.name || 'Unknown Operator'}
                       </h4>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center sm:justify-start gap-3">
                         <span className="text-[10px] font-black text-accent uppercase tracking-widest">{entry.calculatedXp.toLocaleString()} XP</span>
                         <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-orange-500/10 rounded-md border border-orange-500/20">
                           <Flame className="w-3 h-3 text-orange-500 fill-current" />
@@ -255,7 +295,7 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
                       </div>
                     </div>
 
-                    <div className="text-right">
+                    <div className="flex flex-col items-center sm:items-end w-full sm:w-auto pt-4 sm:pt-0 border-t sm:border-0 border-white/5">
                       <div className="text-2xl font-black text-white/80 italic leading-none">{Math.round(entry.consistency)}%</div>
                       <div className="text-[8px] font-black text-text-dim/20 uppercase tracking-widest mt-1">CONSISTENCY</div>
                     </div>
@@ -277,21 +317,37 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
             {others.map((entry, index) => {
               const rank = index + 4;
               return (
-                <div key={entry.uid} className="flex items-center gap-4 p-4 bg-white/[0.01] border border-white/5 rounded-2xl hover:bg-white/[0.03] transition-all">
-                  <span className="w-4 text-[10px] font-black text-text-dim/10 italic">{rank}</span>
-                  <Avatar avatar={entry.avatar} name={entry.displayName || entry.name} size="md" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-black text-white/80 uppercase italic truncate">{entry.displayName || entry.name || 'Unknown'}</span>
-                      <span className="text-[10px] font-black text-accent">{entry.calculatedXp.toLocaleString()} XP</span>
+                <div key={entry.uid} className="relative group flex flex-col sm:flex-row items-center gap-4 p-4 bg-white/[0.01] border border-white/5 rounded-2xl hover:bg-white/[0.03] transition-all">
+                  <div className="flex items-center w-full sm:w-auto gap-4">
+                    <span className="w-4 text-[10px] font-black text-text-dim/10 italic shrink-0">{rank}</span>
+                    <Avatar avatar={entry.avatar} name={entry.displayName || entry.name} size="md" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between sm:justify-start sm:gap-4">
+                        <span className="text-sm font-black text-white/80 uppercase italic truncate">{entry.displayName || entry.name || 'Unknown'}</span>
+                        <span className="text-[10px] font-black text-accent">{entry.calculatedXp.toLocaleString()} XP</span>
+                      </div>
                     </div>
-                    <div className="w-full h-1 bg-white/[0.03] rounded-full overflow-hidden">
+                  </div>
+                  
+                  <div className="flex items-center justify-between w-full sm:w-1/3 sm:ml-auto gap-4">
+                    <div className="flex-1 h-1 bg-white/[0.03] rounded-full overflow-hidden">
                       <div 
                         className="h-full bg-accent/30 rounded-full" 
                         style={{ width: `${entry.consistency}%` }}
                       />
                     </div>
+                    <span className="text-[10px] font-black text-text-dim/40 w-8 text-right">{Math.round(entry.consistency)}%</span>
                   </div>
+
+                  {auth.currentUser?.uid !== entry.uid && (
+                    <button
+                      onClick={() => handleRemoveMember(entry.uid)}
+                      className="absolute sm:static top-3 right-3 sm:top-0 sm:right-0 p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500/40 hover:text-red-500 rounded-lg border border-red-500/10 transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                      title="Remove Member"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               );
             })}
