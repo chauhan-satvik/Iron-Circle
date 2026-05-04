@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with XP and streaks",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "xp": { "type": "number" },
+        "level": { "type": "number" },
+        "totalCompletions": { "type": "number" },
+        "globalStreak": { "type": "number" },
+        "groupId": { "type": "string" },
+        "lastActive": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "displayName", "email", "xp", "level", "groupId", "createdAt"]
+    },
+    "Habit": {
+      "title": "Habit",
+      "description": "A persistent habit",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "difficulty": { "enum": ["easy", "medium", "hard"] },
+        "type": { "enum": ["daily", "weekly"] },
+        "target": { "type": "number" },
+        "xpValue": { "type": "number" },
+        "currentStreak": { "type": "number" },
+        "bestStreak": { "type": "number" },
+        "lastCompletedDate": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "name", "difficulty", "type", "target", "xpValue", "createdAt"]
+    },
+    "DailyCompletions": {
+      "title": "DailyCompletions",
+      "description": "Record of habits completed on a specific day",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "completions": {
+          "type": "object",
+          "description": "Map of habitId to boolean completion status"
+        },
+        "xpEarned": { "type": "number" }
+      },
+      "required": ["date", "completions", "xpEarned"]
+    }
+  },
+  "firestore": {
+    "/groups/{groupId}": {
+      "schema": "object",
+      "description": "Group metadata"
+    },
+    "/groups/{groupId}/users/{userId}": {
+      "schema": "User",
+      "description": "User profile within a group context"
+    },
+    "/groups/{groupId}/users/{userId}/habits/{habitId}": {
+      "schema": "Habit",
+      "description": "User's persistent habits within a group"
+    },
+    "/groups/{groupId}/users/{userId}/completions/{date}": {
+      "schema": "DailyCompletions",
+      "description": "Daily habit completion logs within a group"
+    }
+  }
+}
