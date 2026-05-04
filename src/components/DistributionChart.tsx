@@ -13,10 +13,10 @@ interface DistributionChartProps {
 }
 
 export default function DistributionChart({ data }: DistributionChartProps) {
-  if (data.length === 0) {
+  if (data.length === 0 || data.every(d => d.value === 0)) {
     return (
-      <div className="flex items-center justify-center h-full text-text-dim/50 text-[10px] font-black uppercase tracking-widest italic">
-        Insufficient Data for Neural Mapping
+      <div className="flex items-center justify-center h-full text-text-dim/50 text-[10px] font-black uppercase tracking-widest italic text-center px-8">
+        No active logs detected in the current matrix
       </div>
     );
   }
@@ -47,7 +47,7 @@ export default function DistributionChart({ data }: DistributionChartProps) {
               color: '#fff'
             }}
             itemStyle={{ color: '#fff' }}
-            formatter={(value: number) => [`${value} XP`, 'XP Earned']}
+            formatter={(value: number, name: string) => [`${value} Logs`, name]}
           />
           <Legend 
             verticalAlign="bottom" 

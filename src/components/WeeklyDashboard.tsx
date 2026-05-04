@@ -251,23 +251,12 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
 
   const weeklyConsistency = totalPossibleHabitCompletions > 0 ? completedHabitCount / totalPossibleHabitCompletions : 0;
 
-  // XP Distribution by Difficulty
-  const difficultyXp = { easy: 0, medium: 0, hard: 0 };
-  Object.values(weekCompletions).forEach((day: DayCompletion) => {
-    if (day.completions) {
-      habits.forEach(h => {
-        if (day.completions[h.id]) {
-          difficultyXp[h.difficulty] += (h.xpValue || 0);
-        }
-      });
-    }
-  });
+  const missedHabitCount = Math.max(0, totalPossibleHabitCompletions - completedHabitCount);
 
-  const difficultyChartData = [
-    { name: 'Easy', value: difficultyXp.easy, color: '#3B82F6' },
-    { name: 'Medium', value: difficultyXp.medium, color: '#8B5CF6' },
-    { name: 'Hard', value: difficultyXp.hard, color: '#EC4899' }
-  ].filter(d => d.value > 0);
+  const performanceChartData = [
+    { name: 'Completed', value: completedHabitCount, color: '#3B82F6' },
+    { name: 'Missed', value: missedHabitCount, color: 'rgba(255,255,255,0.05)' }
+  ].filter(d => d.value > 0 || totalPossibleHabitCompletions === 0);
 
   const chartData = currentWeekDays.map(d => {
     const ds = format(d, 'yyyy-MM-dd');
@@ -352,13 +341,13 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
           <div className="mb-6 sm:mb-8 relative z-10">
             <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
               <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 animate-pulse" />
-              <h2 className="text-[8px] sm:text-xs font-black text-white/40 uppercase tracking-[0.25em] sm:tracking-[0.3em]">Complexity Spectrum</h2>
+              <h2 className="text-[8px] sm:text-xs font-black text-white/40 uppercase tracking-[0.25em] sm:tracking-[0.3em]">Goal Adherence</h2>
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tighter italic uppercase">XP Distribution</h1>
+            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tighter italic uppercase">Execution Rate</h1>
           </div>
 
           <div className="h-[200px] sm:h-[280px] w-full relative z-10">
-            <DistributionChart data={difficultyChartData} />
+            <DistributionChart data={performanceChartData} />
           </div>
         </motion.div>
 
