@@ -46,11 +46,24 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
   };
 
   // Utility to calculate consistency
-  const calculateConsistency = (completions: DayCompletion[]) => {
+  const calculateConsistency = (habits: Habit[], completions: DayCompletion[]) => {
+    if (habits.length === 0) return 0;
     const weekDateStrs = currentWeekDays.map(d => format(d, 'yyyy-MM-dd'));
     const weekCompletions = completions.filter(d => weekDateStrs.includes(d.date));
-    const activeDays = weekCompletions.filter(d => d.completions && typeof d.completions === 'object' && Object.values(d.completions).some(v => v)).length;
-    return (activeDays / 7) * 100;
+    
+    let completedCount = 0;
+    weekCompletions.forEach(day => {
+      if (day.completions && typeof day.completions === 'object') {
+        Object.entries(day.completions).forEach(([habitId, completed]) => {
+          if (completed && habits.some(h => h.id === habitId)) {
+            completedCount++;
+          }
+        });
+      }
+    });
+
+    const totalPossible = habits.length * 7;
+    return (completedCount / totalPossible) * 100;
   };
 
   useEffect(() => {
@@ -145,7 +158,7 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
           ...state.profile,
           uid: state.profile.uid || uid,
           calculatedXp: calculateUserXP(state.habits || [], state.completions || []),
-          consistency: calculateConsistency(state.completions || [])
+          consistency: calculateConsistency(state.habits || [], state.completions || [])
         };
       })
       .filter((entry): entry is any => entry !== null)

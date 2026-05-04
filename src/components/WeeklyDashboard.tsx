@@ -234,39 +234,38 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
     }
   };
 
-  // Weekly Progress Calculation (XP-Based and filtered by active habits)
-  const dailyTotalXpPossible = habits.reduce((sum, h) => sum + (h.xpValue || 0), 0);
-  const weeklyTotalXpPossible = dailyTotalXpPossible * 7;
-
-  let weeklyXpEarned = 0;
+  // Weekly Consistency Calculation (Count-Based)
+  const totalPossibleHabitCompletions = habits.length * 7;
+  let completedHabitCount = 0;
+  
   Object.values(weekCompletions).forEach((day: DayCompletion) => {
     if (day.completions) {
       habits.forEach(h => {
         if (day.completions[h.id]) {
-          weeklyXpEarned += (h.xpValue || 0);
+          completedHabitCount++;
         }
       });
     }
   });
 
-  const weeklyProgress = weeklyTotalXpPossible > 0 ? weeklyXpEarned / weeklyTotalXpPossible : 0;
+  const weeklyConsistency = totalPossibleHabitCompletions > 0 ? completedHabitCount / totalPossibleHabitCompletions : 0;
 
   const chartData = currentWeekDays.map(d => {
     const ds = format(d, 'yyyy-MM-dd');
     const dayComp = weekCompletions[ds];
     
-    let dayXp = 0;
+    let dayCompletedCount = 0;
     if (dayComp && dayComp.completions) {
       habits.forEach(h => {
         if (dayComp.completions[h.id]) {
-          dayXp += (h.xpValue || 0);
+          dayCompletedCount++;
         }
       });
     }
 
     return {
       name: format(d, 'EEE'),
-      progress: dailyTotalXpPossible > 0 ? Math.round((dayXp / dailyTotalXpPossible) * 100) : 0
+      progress: habits.length > 0 ? Math.round((dayCompletedCount / habits.length) * 100) : 0
     };
   });
 
@@ -314,7 +313,7 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
             
             <div className="flex sm:flex-col items-center sm:items-end gap-2 sm:gap-1 bg-white/[0.03] sm:bg-transparent px-2.5 py-1.5 sm:p-0 rounded-lg sm:rounded-none border border-white/5 sm:border-none">
               <span className="text-[7px] sm:text-[10px] font-black text-text-dim uppercase tracking-widest leading-none">Consistency</span>
-              <span className="text-base sm:text-2xl font-black text-accent italic leading-none">{Math.round(weeklyProgress * 100)}%</span>
+              <span className="text-base sm:text-2xl font-black text-accent italic leading-none">{Math.round(weeklyConsistency * 100)}%</span>
             </div>
           </div>
           
