@@ -31,7 +31,7 @@ export default function ProfilePanel({ profile, isOpen, onClose, onLogout, onDel
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(profile.displayName);
   const [tempUsername, setTempUsername] = useState(profile.username);
-  const [selectedColor, setSelectedColor] = useState(profile.avatar.color);
+  const [selectedColor, setSelectedColor] = useState(profile.avatar?.color || '#3B82F6');
   const [isSaving, setIsSaving] = useState(false);
 
   const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4'];
@@ -46,9 +46,10 @@ export default function ProfilePanel({ profile, isOpen, onClose, onLogout, onDel
         displayName: tempName,
         username: tempUsername.toLowerCase().replace(/[^a-z0-9_]/g, ''),
         avatar: {
-          ...profile.avatar,
+          ...(profile.avatar || {}),
+          type: profile.avatar?.type || 'initials',
           color: selectedColor,
-          value: tempName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+          value: tempName.trim().split(/\s+/).map(n => n ? n[0] : '').filter(Boolean).join('').toUpperCase().slice(0, 2) || '?'
         },
         updatedAt: Date.now()
       }, { merge: true });

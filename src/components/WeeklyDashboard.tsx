@@ -121,15 +121,27 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
     const nestedUserRef = doc(db, 'groups', profile.groupId, 'users', profile.uid);
 
     try {
+      // Fetch all habits and completions for full recalculation BEFORE transaction
+      const habitsPath = `groups/${profile.groupId}/users/${profile.uid}/habits`;
+      const completionsPath = `groups/${profile.groupId}/users/${profile.uid}/completions`;
+      
+      const [habitsSnap, completionsSnap] = await Promise.all([
+        getDocs(collection(db, habitsPath)),
+        getDocs(collection(db, completionsPath))
+      ]);
+
       await runTransaction(db, async (transaction) => {
         const habitSnap = await transaction.get(habitRef);
-        const completionSnap = await transaction.get(completionRef);
         const userSnap = await transaction.get(userRef);
+        const completionSnap = await transaction.get(completionRef);
 
         if (!habitSnap.exists() || !userSnap.exists()) return;
 
         const habitData = habitSnap.data() as Habit;
         const userData = userSnap.data() as UserProfile;
+        const allHabits = habitsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Habit));
+        const allCompletions = completionsSnap.docs.map(d => ({ id: d.id, ...d.data() } as DayCompletion));
+
         const completionData = completionSnap.exists() 
           ? (completionSnap.data() as DayCompletion) 
           : { date: dateStr, completions: {}, xpEarned: 0 };
@@ -139,10 +151,45 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
         
         if (!isAdding) delete newCompletions[habitId];
 
+        // Prepare this day's update
         const xpDelta = isAdding ? habitData.xpValue : -habitData.xpValue;
+        const updatedDayCompletions = newCompletions;
+
+        // Recalculate total XP from all logs
+        let calculatedXp = 0;
+        allCompletions.forEach(day => {
+          const comps = day.id === dateStr ? updatedDayCompletions : day.completions;
+          if (comps) {
+            Object.keys(comps).forEach(hId => {
+              if (comps[hId]) {
+                const h = allHabits.find(habit => habit.id === hId);
+                if (h) calculatedXp += (h.xpValue || 0);
+              }
+            });
+          }
+        });
+
+        // If the day was new, we didn't include it in allCompletions loop properly if it wasn't already in the snapshot
+        if (!allCompletions.find(d => d.id === dateStr)) {
+          Object.keys(updatedDayCompletions).forEach(hId => {
+            if (updatedDayCompletions[hId]) {
+              const h = allHabits.find(habit => habit.id === hId);
+              if (h) calculatedXp += (h.xpValue || 0);
+            }
+          });
+        }
+
+        const newLevel = Math.floor(Math.sqrt(calculatedXp / 100));
+
+        transaction.set(completionRef, {
+          ...completionData,
+          completions: updatedDayCompletions,
+          xpEarned: (completionData.xpEarned || 0) + xpDelta
+        });
+
+        // Streak logic
         let newHabitStreak = habitData.currentStreak || 0;
         let lastCompletedDate = habitData.lastCompletedDate;
-        
         const todayStr = format(new Date(), 'yyyy-MM-dd');
         const yesterdayStr = format(subDays(new Date(), 1), 'yyyy-MM-dd');
 
@@ -159,19 +206,10 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
             lastCompletedDate = yesterdayStr; 
           }
         }
-
         const newBestStreak = Math.max(habitData.bestStreak || 0, newHabitStreak);
-        const newTotalXp = Math.max(0, (userData.xp || 0) + xpDelta);
-        const newLevel = Math.floor(Math.sqrt(newTotalXp / 100));
-
-        transaction.set(completionRef, {
-          ...completionData,
-          completions: newCompletions,
-          xpEarned: (completionData.xpEarned || 0) + xpDelta
-        });
 
         const userUpdates = {
-          xp: newTotalXp,
+          xp: calculatedXp,
           level: newLevel,
           totalCompletions: (userData.totalCompletions || 0) + (isAdding ? 1 : -1),
           lastActive: Date.now()
@@ -196,20 +234,39 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
     }
   };
 
-  // Weekly Progress Calculation
-  const totalPossible = habits.length * 7;
-  const currentTotal = Object.values(weekCompletions).reduce((sum: number, day: DayCompletion) => 
-    sum + Object.keys(day.completions).length, 0
-  );
-  const weeklyProgress = totalPossible > 0 ? (currentTotal as number) / totalPossible : 0;
+  // Weekly Progress Calculation (XP-Based and filtered by active habits)
+  const dailyTotalXpPossible = habits.reduce((sum, h) => sum + (h.xpValue || 0), 0);
+  const weeklyTotalXpPossible = dailyTotalXpPossible * 7;
+
+  let weeklyXpEarned = 0;
+  Object.values(weekCompletions).forEach((day: DayCompletion) => {
+    if (day.completions) {
+      habits.forEach(h => {
+        if (day.completions[h.id]) {
+          weeklyXpEarned += (h.xpValue || 0);
+        }
+      });
+    }
+  });
+
+  const weeklyProgress = weeklyTotalXpPossible > 0 ? weeklyXpEarned / weeklyTotalXpPossible : 0;
 
   const chartData = currentWeekDays.map(d => {
     const ds = format(d, 'yyyy-MM-dd');
     const dayComp = weekCompletions[ds];
-    const completed = dayComp ? Object.keys(dayComp.completions).length : 0;
+    
+    let dayXp = 0;
+    if (dayComp && dayComp.completions) {
+      habits.forEach(h => {
+        if (dayComp.completions[h.id]) {
+          dayXp += (h.xpValue || 0);
+        }
+      });
+    }
+
     return {
       name: format(d, 'EEE'),
-      progress: habits.length > 0 ? Math.round((completed / habits.length) * 100) : 0
+      progress: dailyTotalXpPossible > 0 ? Math.round((dayXp / dailyTotalXpPossible) * 100) : 0
     };
   });
 

@@ -122,10 +122,11 @@ export default function AuthWrapper() {
       
       const identityData = {
         displayName: tempName.trim(),
+        name: tempName.trim(),
         username: tempUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''),
         avatar: {
           type: 'initials',
-          value: tempName.trim().split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+          value: tempName.trim().split(/\s+/).map(n => n ? n[0] : '').filter(Boolean).join('').toUpperCase().slice(0, 2) || '?',
           color: selectedColor
         },
         lastActive: now,
@@ -365,7 +366,7 @@ export default function AuthWrapper() {
                     <div className="w-1 h-1 rounded-full bg-accent/40 animate-pulse shrink-0" />
                   </div>
                   <h3 className="text-sm sm:text-lg font-black text-white italic tracking-tighter uppercase group-hover:text-accent transition-colors truncate">
-                    {profile?.displayName || 'Anon'}
+                    {profile?.displayName || profile?.name || 'Anon'}
                   </h3>
                 </div>
               </div>
@@ -556,7 +557,11 @@ export default function AuthWrapper() {
             >
               <div className="absolute -top-12 left-1/2 -translate-x-1/2">
                 <Avatar 
-                  avatar={{ type: 'initials', value: tempName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2), color: selectedColor }}
+                  avatar={{ 
+                    type: 'initials', 
+                    value: tempName.trim().split(/\s+/).map(n => n ? n[0] : '').filter(Boolean).join('').toUpperCase().slice(0, 2) || '?', 
+                    color: selectedColor 
+                  }}
                   name={tempName}
                   size="xl"
                   className="shadow-[0_20px_50px_rgba(0,0,0,0.5)] border-4 border-bg-main"

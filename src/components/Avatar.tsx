@@ -27,10 +27,12 @@ export default function Avatar({
     xl: 'w-20 h-20 text-2xl',
   };
 
-  const initials = name
+  const initials = typeof name === 'string' && name.trim()
     ? name
-        .split(' ')
-        .map((n) => n[0])
+        .trim()
+        .split(/\s+/)
+        .map((n) => n ? n[0] : '')
+        .filter(Boolean)
         .join('')
         .toUpperCase()
         .slice(0, 2)
