@@ -27,9 +27,15 @@ export interface UserProfile {
   username: string;
   email: string;
   avatar: {
-    type: 'initials' | 'emoji' | 'image';
+    type: 'initials' | 'emoji' | 'image' | 'selection';
     value: string;
     color: string;
+  };
+  bio?: string;
+  socialLinks?: {
+    twitter?: string;
+    github?: string;
+    website?: string;
   };
   xp: number;
   level: number;
@@ -37,6 +43,8 @@ export interface UserProfile {
   totalCompletions: number;
   lastActive: number;
   groupId: string;
+  defaultFocusDuration?: number;
+  defaultBreakDuration?: number;
   createdAt: number;
 }
 
@@ -54,4 +62,13 @@ export interface Group {
   id: string;
   name: string;
   members: string[];
+}
+
+export interface FocusSession {
+  id: string;
+  userId: string;
+  duration: number; // minutes
+  date: string; // YYYY-MM-DD
+  completed: boolean;
+  createdAt: number;
 }

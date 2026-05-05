@@ -15,9 +15,17 @@ import {
   ChevronRight,
   ShieldCheck,
   LogOut,
-  X
+  X,
+  Twitter,
+  Github,
+  Globe,
+  Edit2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+
+const PREDEFINED_AVATARS = [
+  '⚡', '🛡️', '🧠', '⚔️', '🔮', '🧬', '🌌', '🌋', '🌊', '🌪️', '🦾', '👾', '🚀', '🔭', '📡', '💎', '🔥', '☄️'
+];
 
 interface ProfilePanelProps {
   profile: UserProfile;
@@ -31,6 +39,12 @@ export default function ProfilePanel({ profile, isOpen, onClose, onLogout, onDel
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(profile.displayName);
   const [tempUsername, setTempUsername] = useState(profile.username);
+  const [tempBio, setTempBio] = useState(profile.bio || '');
+  const [tempTwitter, setTempTwitter] = useState(profile.socialLinks?.twitter || '');
+  const [tempGithub, setTempGithub] = useState(profile.socialLinks?.github || '');
+  const [tempWebsite, setTempWebsite] = useState(profile.socialLinks?.website || '');
+  const [tempAvatarType, setTempAvatarType] = useState<UserProfile['avatar']['type']>(profile.avatar?.type || 'initials');
+  const [tempAvatarValue, setTempAvatarValue] = useState(profile.avatar?.value || '');
   const [selectedColor, setSelectedColor] = useState(profile.avatar?.color || '#3B82F6');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -41,18 +55,32 @@ export default function ProfilePanel({ profile, isOpen, onClose, onLogout, onDel
   const handleSave = async () => {
     setIsSaving(true);
     const userRef = doc(db, 'users', profile.uid);
+    const groupMemberRef = doc(db, 'groups', profile.groupId, 'users', profile.uid);
+    
     try {
-      await setDoc(userRef, {
+      const avatarValue = tempAvatarType === 'initials' 
+        ? tempName.trim().split(/\s+/).map(n => n ? n[0] : '').filter(Boolean).join('').toUpperCase().slice(0, 2) || '?'
+        : tempAvatarValue;
+
+      const updates = {
         displayName: tempName,
         username: tempUsername.toLowerCase().replace(/[^a-z0-9_]/g, ''),
+        bio: tempBio,
+        socialLinks: {
+          twitter: tempTwitter,
+          github: tempGithub,
+          website: tempWebsite
+        },
         avatar: {
-          ...(profile.avatar || {}),
-          type: profile.avatar?.type || 'initials',
+          type: tempAvatarType,
           color: selectedColor,
-          value: tempName.trim().split(/\s+/).map(n => n ? n[0] : '').filter(Boolean).join('').toUpperCase().slice(0, 2) || '?'
+          value: avatarValue
         },
         updatedAt: Date.now()
-      }, { merge: true });
+      };
+
+      await setDoc(userRef, updates, { merge: true });
+      await setDoc(groupMemberRef, updates, { merge: true });
       setIsEditing(false);
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, userRef.path);
@@ -111,6 +139,28 @@ export default function ProfilePanel({ profile, isOpen, onClose, onLogout, onDel
                 <div>
                   <h3 className="text-2xl font-black text-white italic uppercase tracking-tighter">{profile.displayName}</h3>
                   <p className="text-accent font-black text-sm tracking-widest mt-1">@{profile.username}</p>
+                </div>
+                
+                {profile.bio && (
+                  <p className="text-sm text-text-dim max-w-xs mx-auto leading-relaxed">{profile.bio}</p>
+                )}
+
+                <div className="flex items-center justify-center gap-4">
+                  {profile.socialLinks?.twitter && (
+                    <a href={`https://twitter.com/${profile.socialLinks.twitter}`} target="_blank" rel="noopener noreferrer" className="p-2 bg-white/5 rounded-xl text-text-dim hover:text-[#1DA1F2] hover:bg-white/10 transition-all">
+                      <Twitter className="w-4 h-4" />
+                    </a>
+                  )}
+                  {profile.socialLinks?.github && (
+                    <a href={`https://github.com/${profile.socialLinks.github}`} target="_blank" rel="noopener noreferrer" className="p-2 bg-white/5 rounded-xl text-text-dim hover:text-white hover:bg-white/10 transition-all">
+                      <Github className="w-4 h-4" />
+                    </a>
+                  )}
+                  {profile.socialLinks?.website && (
+                    <a href={profile.socialLinks.website.startsWith('http') ? profile.socialLinks.website : `https://${profile.socialLinks.website}`} target="_blank" rel="noopener noreferrer" className="p-2 bg-white/5 rounded-xl text-text-dim hover:text-accent hover:bg-white/10 transition-all">
+                      <Globe className="w-4 h-4" />
+                    </a>
+                  )}
                 </div>
               </div>
 
@@ -177,6 +227,77 @@ export default function ProfilePanel({ profile, isOpen, onClose, onLogout, onDel
                           onChange={(e) => setTempUsername(e.target.value)}
                           className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-4 text-white font-bold focus:outline-none focus:border-accent"
                         />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-white/40 uppercase tracking-widest ml-2">Bio</label>
+                        <textarea 
+                          value={tempBio}
+                          onChange={(e) => setTempBio(e.target.value)}
+                          placeholder="Your neural mission statement..."
+                          rows={3}
+                          className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-4 text-white font-bold focus:outline-none focus:border-accent resize-none text-sm"
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-2">Twitter</label>
+                          <input 
+                            type="text"
+                            value={tempTwitter}
+                            onChange={(e) => setTempTwitter(e.target.value)}
+                            placeholder="username"
+                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-accent"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-2">GitHub</label>
+                          <input 
+                            type="text"
+                            value={tempGithub}
+                            onChange={(e) => setTempGithub(e.target.value)}
+                            placeholder="username"
+                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-accent"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-2">Web</label>
+                          <input 
+                            type="text"
+                            value={tempWebsite}
+                            onChange={(e) => setTempWebsite(e.target.value)}
+                            placeholder="url"
+                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-accent"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-white/40 uppercase tracking-widest ml-2">Avatar Manifestation</label>
+                        <div className="grid grid-cols-6 gap-2">
+                          <button 
+                            onClick={() => setTempAvatarType('initials')}
+                            className={cn(
+                              "aspect-square rounded-xl flex items-center justify-center text-xs font-black transition-all",
+                              tempAvatarType === 'initials' ? "bg-accent text-white scale-110 shadow-lg" : "bg-white/5 text-text-dim hover:bg-white/10"
+                            )}
+                          >
+                            TX
+                          </button>
+                          {PREDEFINED_AVATARS.map(avatar => (
+                            <button 
+                              key={avatar}
+                              onClick={() => {
+                                setTempAvatarType('selection');
+                                setTempAvatarValue(avatar);
+                              }}
+                              className={cn(
+                                "aspect-square rounded-xl flex items-center justify-center text-lg transition-all",
+                                tempAvatarType === 'selection' && tempAvatarValue === avatar ? "bg-accent text-white scale-110 shadow-lg" : "bg-white/5 text-text-dim hover:bg-white/10"
+                              )}
+                            >
+                              {avatar}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-white/40 uppercase tracking-widest ml-2">Neural Link Color</label>

@@ -52,7 +52,7 @@ export default function Avatar({
           color: avatar?.color || undefined
         }}
       >
-        {avatar?.type === 'initials' && (
+        {(avatar?.type === 'initials' || avatar?.type === 'selection') && (
           <span style={{ color: avatar.color }}>{avatar.value || initials}</span>
         )}
         {avatar?.type === 'emoji' && (

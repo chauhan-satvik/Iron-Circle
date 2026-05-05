@@ -10,12 +10,12 @@ import {
   runTransaction
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { UserProfile, DayCompletion, Habit, Group } from '../types';
-import { Trophy, Crown, Zap, Flame, Shield, Trash2, UserMinus } from 'lucide-react';
+import { UserProfile, DayCompletion, Habit, Group, FocusSession } from '../types';
+import { Trophy, Crown, Zap, Flame, Shield, Trash2, UserMinus, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, getDaysOfWeek } from '../lib/utils';
 import Avatar from './Avatar';
-import { format } from 'date-fns';
+import { format, startOfDay } from 'date-fns';
 
 interface LeaderboardProps {
   groupId: string;
@@ -25,6 +25,7 @@ interface UserState {
   profile: UserProfile;
   habits: Habit[];
   completions: DayCompletion[];
+  focusSessions: FocusSession[];
 }
 
 export default function Leaderboard({ groupId }: LeaderboardProps) {
@@ -33,8 +34,9 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
   const currentWeekDays = useMemo(() => getDaysOfWeek(new Date()), []);
 
   // Utility to calculate XP dynamically
-  const calculateUserXP = (habits: Habit[], completions: DayCompletion[]) => {
+  const calculateUserXP = (habits: Habit[], completions: DayCompletion[], focusSessions: FocusSession[]) => {
     let total = 0;
+    // Habit XP
     completions.forEach(day => {
       if (day.completions) {
         Object.entries(day.completions).forEach(([habitId, completed]) => {
@@ -45,6 +47,14 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
         });
       }
     });
+
+    // Focus Session XP: duration * 2
+    focusSessions.forEach(session => {
+      if (session.completed) {
+        total += (session.duration * 2);
+      }
+    });
+
     return total;
   };
 
@@ -112,7 +122,7 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
           // Initialize state
           setUserStates(prev => ({
             ...prev,
-            [uid]: { profile: { ...profile, uid }, habits: [], completions: [] }
+            [uid]: { profile: { ...profile, uid }, habits: [], completions: [], focusSessions: [] }
           }));
 
           // Set up habits listener
@@ -142,6 +152,20 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
             });
           }, (error) => console.error("Leaderboard completions error:", error));
           unsubMap[`${uid}_completions`] = completionsUnsub;
+
+          // Set up focus sessions listener
+          const focusRef = collection(db, 'groups', groupId, 'users', uid, 'focusSessions');
+          const focusUnsub = onSnapshot(focusRef, (s) => {
+            const focusSessions = s.docs.map(d => ({ id: d.id, ...d.data() } as FocusSession));
+            setUserStates(prev => {
+              if (!prev[uid]) return prev;
+              return {
+                ...prev,
+                [uid]: { ...prev[uid], focusSessions }
+              };
+            });
+          }, (error) => console.error("Leaderboard focus error:", error));
+          unsubMap[`${uid}_focus`] = focusUnsub;
         }
 
         if (change.type === 'modified' && profile) {
@@ -162,6 +186,10 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
           if (unsubMap[`${uid}_completions`]) {
             unsubMap[`${uid}_completions`]();
             delete unsubMap[`${uid}_completions`];
+          }
+          if (unsubMap[`${uid}_focus`]) {
+            unsubMap[`${uid}_focus`]();
+            delete unsubMap[`${uid}_focus`];
           }
           setUserStates(prev => {
             const next = { ...prev };
@@ -187,7 +215,7 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
         return {
           ...state.profile,
           uid: state.profile.uid || uid,
-          calculatedXp: calculateUserXP(state.habits || [], state.completions || []),
+          calculatedXp: calculateUserXP(state.habits || [], state.completions || [], state.focusSessions || []),
           consistency: calculateConsistency(state.habits || [], state.completions || [])
         };
       })

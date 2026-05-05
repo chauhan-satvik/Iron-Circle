@@ -20,16 +20,48 @@ import {
   getDocs,
   runTransaction
 } from 'firebase/firestore';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { cn } from '../lib/utils';
 import { handleFirestoreError, OperationType } from '../lib/firestoreError';
 import { UserProfile, Group } from '../types';
 import { format } from 'date-fns';
 import WeeklyDashboard from './WeeklyDashboard';
+import FocusTimer from './FocusTimer';
 import Avatar from './Avatar';
 import ProfilePanel from './ProfilePanel';
-import { LogIn, LogOut, Shield, Trash2, X, AlertTriangle, User as UserIcon, Hash, Palette, Flame } from 'lucide-react';
+import { LogIn, LogOut, Shield, Trash2, X, AlertTriangle, User as UserIcon, Hash, Palette, Flame, LayoutDashboard, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+function Navigation() {
+  const location = useLocation();
+  
+  return (
+    <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center p-2 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+      <Link 
+        to="/"
+        className={cn(
+          "flex items-center gap-2 px-6 py-3 rounded-[1.5rem] transition-all duration-300",
+          location.pathname === '/' ? "bg-accent text-white shadow-lg" : "text-text-dim hover:text-white"
+        )}
+      >
+        <LayoutDashboard className="w-4 h-4" />
+        <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Tactical Grid</span>
+      </Link>
+      <div className="w-px h-4 bg-white/10 mx-2" />
+      <Link 
+        to="/focus"
+        className={cn(
+          "flex items-center gap-2 px-6 py-3 rounded-[1.5rem] transition-all duration-300",
+          location.pathname === '/focus' ? "bg-accent text-white shadow-lg" : "text-text-dim hover:text-white"
+        )}
+      >
+        <Timer className="w-4 h-4" />
+        <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Focus Chamber</span>
+      </Link>
+    </nav>
+  );
+}
 
 export default function AuthWrapper() {
   const [user, setUser] = useState<User | null>(null);
@@ -280,7 +312,8 @@ export default function AuthWrapper() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-main text-[#F1F5F9] font-sans selection:bg-accent/30 overflow-x-hidden">
+    <Router>
+      <div className="min-h-screen bg-bg-main text-[#F1F5F9] font-sans selection:bg-accent/30 overflow-x-hidden">
       <AnimatePresence mode="wait">
         {!user ? (
           <motion.div 
@@ -420,7 +453,11 @@ export default function AuthWrapper() {
             <main className="max-w-screen-2xl mx-auto p-4 sm:p-8 text-[#F1F5F9]">
               {(profile && profile.displayName && profile.displayName !== 'Anon') ? (
                 <>
-                  <WeeklyDashboard profile={profile} />
+                  <Routes>
+                    <Route path="/" element={<WeeklyDashboard profile={profile} />} />
+                    <Route path="/focus" element={<FocusTimer profile={profile} />} />
+                  </Routes>
+                  <Navigation />
                   <ProfilePanel 
                     profile={profile} 
                     isOpen={isProfileOpen} 
@@ -637,5 +674,6 @@ export default function AuthWrapper() {
         )}
       </AnimatePresence>
     </div>
+    </Router>
   );
 }

@@ -157,30 +157,8 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
         const updatedDayCompletions = newCompletions;
 
         // Recalculate total XP from all logs
-        let calculatedXp = 0;
-        allCompletions.forEach(day => {
-          const comps = day.id === dateStr ? updatedDayCompletions : day.completions;
-          if (comps) {
-            Object.keys(comps).forEach(hId => {
-              if (comps[hId]) {
-                const h = allHabits.find(habit => habit.id === hId);
-                if (h) calculatedXp += (h.xpValue || 0);
-              }
-            });
-          }
-        });
-
-        // If the day was new, we didn't include it in allCompletions loop properly if it wasn't already in the snapshot
-        if (!allCompletions.find(d => d.id === dateStr)) {
-          Object.keys(updatedDayCompletions).forEach(hId => {
-            if (updatedDayCompletions[hId]) {
-              const h = allHabits.find(habit => habit.id === hId);
-              if (h) calculatedXp += (h.xpValue || 0);
-            }
-          });
-        }
-
-        const newLevel = Math.floor(Math.sqrt(calculatedXp / 100));
+        const newTotalXp = Math.max(0, (userData.xp || 0) + xpDelta);
+        const newLevel = Math.floor(Math.sqrt(newTotalXp / 100));
 
         transaction.set(completionRef, {
           ...completionData,
@@ -210,9 +188,9 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
         const newBestStreak = Math.max(habitData.bestStreak || 0, newHabitStreak);
 
         const userUpdates = {
-          xp: calculatedXp,
+          xp: newTotalXp,
           level: newLevel,
-          totalCompletions: (userData.totalCompletions || 0) + (isAdding ? 1 : -1),
+          totalCompletions: Math.max(0, (userData.totalCompletions || 0) + (isAdding ? 1 : -1)),
           lastActive: Date.now()
         };
 
