@@ -114,6 +114,14 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
 
   const handleToggleHabit = async (habitId: string, dateStr: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
+    
+    // Security check: Only allow today's date
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    if (dateStr !== todayStr) {
+      console.warn("Retrospective or future habit manipulation detected and blocked.");
+      return;
+    }
+
     const habitPath = `groups/${profile.groupId}/users/${profile.uid}/habits/${habitId}`;
     const habitRef = doc(db, habitPath);
     const completionPath = `groups/${profile.groupId}/users/${profile.uid}/completions/${dateStr}`;

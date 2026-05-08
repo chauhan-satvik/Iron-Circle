@@ -89,9 +89,9 @@ export default function HabitGrid({ habits, days, onToggleCell }: HabitGridProps
                     )}>
                       <div className="flex justify-center p-1 sm:p-2">
                         <motion.button
-                          whileHover={!isFuture ? { scale: 1.1, backgroundColor: 'rgba(255,255,255,0.05)' } : {}}
-                          whileTap={!isFuture ? { scale: 0.95 } : {}}
-                          disabled={isFuture}
+                          whileHover={isToday ? { scale: 1.1, backgroundColor: 'rgba(255,255,255,0.05)' } : {}}
+                          whileTap={isToday ? { scale: 0.95 } : {}}
+                          disabled={!isToday}
                           onClick={() => onToggleCell(habit.id, dateStr)}
                           className={cn(
                             "w-8 h-8 sm:w-12 sm:h-12 rounded-xl border flex items-center justify-center transition-all duration-500 relative group/cell overflow-hidden",
@@ -99,9 +99,9 @@ export default function HabitGrid({ habits, days, onToggleCell }: HabitGridProps
                               ? "bg-accent border-accent text-white shadow-[0_0_15px_rgba(59,130,246,0.3)]" 
                               : isMissed 
                                 ? "bg-red-500/[0.05] border-red-500/20 text-red-500/10"
-                                : "bg-white/[0.02] border-white/5 text-transparent hover:border-white/20",
-                            isFuture && "opacity-5 cursor-not-allowed border-dashed grayscale",
-                            isToday && !isCompleted && "border-accent/40 ring-1 ring-accent/20 animate-pulse"
+                                : "bg-white/[0.02] border-white/5 text-transparent",
+                            !isToday && "opacity-20 cursor-not-allowed border-dashed grayscale",
+                            isToday && !isCompleted && "border-accent/40 ring-1 ring-accent/20 animate-pulse hover:border-white/20"
                           )}
                         >
                           {isCompleted ? (
@@ -112,12 +112,9 @@ export default function HabitGrid({ habits, days, onToggleCell }: HabitGridProps
                               <Check className="w-5 h-5 sm:w-6 h-6 stroke-[3]" />
                             </motion.div>
                           ) : (
-                            !isFuture && (
-                              <div className={cn(
-                                "text-[8px] font-black opacity-0 group-hover/cell:opacity-100 transition-all uppercase tracking-tighter transform translate-y-1 group-hover/cell:translate-y-0",
-                                isMissed ? "text-red-500/60" : "text-white/20"
-                              )}>
-                                {isMissed ? 'RETRY' : 'SYNC'}
+                            isToday && (
+                              <div className="text-[8px] font-black opacity-0 group-hover/cell:opacity-100 transition-all uppercase tracking-tighter transform translate-y-1 group-hover/cell:translate-y-0 text-white/20">
+                                SYNC
                               </div>
                             )
                           )}
