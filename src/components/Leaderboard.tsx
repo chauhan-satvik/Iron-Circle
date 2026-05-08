@@ -5,13 +5,12 @@ import {
   query, 
   where,
   doc,
-  deleteDoc,
   getDoc,
   runTransaction
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { UserProfile, DayCompletion, Habit, Group, FocusSession } from '../types';
-import { Trophy, Crown, Zap, Flame, Shield, Trash2, UserMinus, Timer } from 'lucide-react';
+import { Trophy, Crown, Zap, Flame, Shield, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, getDaysOfWeek } from '../lib/utils';
 import Avatar from './Avatar';
@@ -77,33 +76,6 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
 
     const totalPossible = habits.length * 7;
     return (completedCount / totalPossible) * 100;
-  };
-
-  const handleRemoveMember = async (targetUid: string) => {
-    if (!window.confirm("Remove this operative from the group? All their local group data will be purged.")) return;
-
-    try {
-      // 1. Remove from group's nested users collection
-      const groupUserRef = doc(db, 'groups', groupId, 'users', targetUid);
-      await deleteDoc(groupUserRef);
-
-      // 2. Update group's members array
-      const groupRef = doc(db, 'groups', groupId);
-      await runTransaction(db, async (transaction) => {
-        const groupSnap = await transaction.get(groupRef);
-        if (groupSnap.exists()) {
-          const data = groupSnap.data() as Group;
-          const newMembers = (data.members || []).filter(m => m !== targetUid);
-          transaction.update(groupRef, { members: newMembers });
-        }
-      });
-      
-      // Note: In a real app, you'd also clear the user's groupId in their profile,
-      // but that requires permissions. This handles the group-side removal.
-    } catch (error) {
-      console.error("Failed to remove member:", error);
-      alert("System Error: Unauthorized or Network failure.");
-    }
   };
 
   useEffect(() => {
@@ -282,16 +254,6 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
                     </div>
                   )}
 
-                  {!isRank1 && auth.currentUser?.uid !== entry.uid && (
-                    <button
-                      onClick={() => handleRemoveMember(entry.uid)}
-                      className="absolute top-4 right-4 p-2 bg-red-500/10 hover:bg-red-500/20 text-red-500/40 hover:text-red-500 rounded-xl border border-red-500/10 transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100 z-20"
-                      title="Remove Member"
-                    >
-                      <UserMinus className="w-4 h-4" />
-                    </button>
-                  )}
-                  
                   <div className="flex flex-col sm:flex-row items-center sm:items-center gap-5">
                     <div className="relative shrink-0">
                       <Avatar 
@@ -366,16 +328,6 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
                     </div>
                     <span className="text-[10px] font-black text-text-dim/40 w-8 text-right">{Math.round(entry.consistency)}%</span>
                   </div>
-
-                  {auth.currentUser?.uid !== entry.uid && (
-                    <button
-                      onClick={() => handleRemoveMember(entry.uid)}
-                      className="absolute sm:static top-3 right-3 sm:top-0 sm:right-0 p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500/40 hover:text-red-500 rounded-lg border border-red-500/10 transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                      title="Remove Member"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
                 </div>
               );
             })}
