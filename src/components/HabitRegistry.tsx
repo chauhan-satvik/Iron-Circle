@@ -21,7 +21,7 @@ export default function HabitRegistry({ habits, onAddHabit, onUpdateHabit, onDel
   const [type, setType] = useState<HabitType>('daily');
   const [target, setTarget] = useState(3);
 
-  const MAX_HABITS = 6;
+  const MAX_HABITS = 10;
   const canAdd = habits.length < MAX_HABITS;
 
   const handleSubmit = (e: React.FormEvent) => {
