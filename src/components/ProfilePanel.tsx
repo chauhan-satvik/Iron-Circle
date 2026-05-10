@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UserProfile, Group } from '../types';
+import { UserProfile, Habit, DayCompletion, FocusSession } from '../types';
 import { db } from '../firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreError';
@@ -29,13 +29,33 @@ const PREDEFINED_AVATARS = [
 
 interface ProfilePanelProps {
   profile: UserProfile;
+  habits: Habit[];
+  completions: DayCompletion[];
+  focusSessions: FocusSession[];
+  derivedXp: number;
+  derivedLevel: number;
+  globalStreak: number;
+  today: Date;
   isOpen: boolean;
   onClose: () => void;
   onLogout: () => void;
   onDeleteRequested: () => void;
 }
 
-export default function ProfilePanel({ profile, isOpen, onClose, onLogout, onDeleteRequested }: ProfilePanelProps) {
+export default function ProfilePanel({ 
+  profile, 
+  habits,
+  completions,
+  focusSessions,
+  derivedXp,
+  derivedLevel,
+  globalStreak,
+  today,
+  isOpen, 
+  onClose, 
+  onLogout, 
+  onDeleteRequested 
+}: ProfilePanelProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(profile.displayName);
   const [tempUsername, setTempUsername] = useState(profile.username);
@@ -49,8 +69,8 @@ export default function ProfilePanel({ profile, isOpen, onClose, onLogout, onDel
   const [isSaving, setIsSaving] = useState(false);
 
   const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4'];
-  const xpInLevel = (profile.xp || 0) % 1000;
-  const progress = (xpInLevel / 1000) * 100;
+  const xpInLevel = derivedXp % 100;
+  const progress = (xpInLevel / 100) * 100;
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -169,14 +189,14 @@ export default function ProfilePanel({ profile, isOpen, onClose, onLogout, onDel
                 <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 text-center">
                   <div className="flex items-center justify-center gap-2 mb-2 text-orange-500">
                     <Flame className="w-4 h-4 fill-current" />
-                    <span className="text-2xl font-black italic tracking-tighter">{profile.globalStreak}</span>
+                    <span className="text-2xl font-black italic tracking-tighter">{globalStreak}</span>
                   </div>
                   <div className="text-[10px] font-black text-text-dim uppercase tracking-widest">Active Streak</div>
                 </div>
                 <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 text-center">
                   <div className="flex items-center justify-center gap-2 mb-2 text-accent">
                     <ShieldCheck className="w-4 h-4 fill-current" />
-                    <span className="text-2xl font-black italic tracking-tighter">{profile.level}</span>
+                    <span className="text-2xl font-black italic tracking-tighter">{derivedLevel}</span>
                   </div>
                   <div className="text-[10px] font-black text-text-dim uppercase tracking-widest">Security Level</div>
                 </div>
@@ -187,9 +207,9 @@ export default function ProfilePanel({ profile, isOpen, onClose, onLogout, onDel
                 <div className="flex items-center justify-between px-2">
                   <div className="flex items-center gap-2">
                     <Zap className="w-4 h-4 text-accent fill-current" />
-                    <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">Progress to Level {profile.level + 1}</span>
+                    <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">Progress to Level {derivedLevel + 1}</span>
                   </div>
-                  <span className="text-[10px] font-black text-accent">{xpInLevel.toLocaleString()} / 1,000 XP</span>
+                  <span className="text-[10px] font-black text-accent">{xpInLevel.toLocaleString()} / 100 XP</span>
                 </div>
                 <div className="h-4 bg-white/5 rounded-full p-1 border border-white/5">
                   <motion.div 

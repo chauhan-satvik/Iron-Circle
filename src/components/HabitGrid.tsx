@@ -9,10 +9,11 @@ interface HabitGridProps {
   habits: Habit[];
   days: Record<string, DayCompletion>;
   onToggleCell: (habitId: string, date: string) => void;
+  today: Date;
 }
 
-export default function HabitGrid({ habits, days, onToggleCell }: HabitGridProps) {
-  const currentWeekDays = getDaysOfWeek(new Date());
+export default function HabitGrid({ habits, days, onToggleCell, today }: HabitGridProps) {
+  const currentWeekDays = getDaysOfWeek(today);
 
   return (
     <div className="w-full bg-bg-card rounded-[2.5rem] border border-border-main overflow-hidden shadow-2xl">
@@ -24,7 +25,7 @@ export default function HabitGrid({ habits, days, onToggleCell }: HabitGridProps
                 <span className="text-[10px] font-black text-text-dim/40 uppercase tracking-[0.3em]">Habit Protocol</span>
               </th>
               {currentWeekDays.map(date => {
-                const isToday = isSameDay(date, new Date());
+                const isToday = isSameDay(date, today);
                 return (
                   <th key={date.toString()} className="p-4 min-w-[80px]">
                     <div className="flex flex-col items-center gap-1">
@@ -77,9 +78,9 @@ export default function HabitGrid({ habits, days, onToggleCell }: HabitGridProps
                 {currentWeekDays.map(date => {
                   const dateStr = format(date, 'yyyy-MM-dd');
                   const isCompleted = days[dateStr]?.completions?.[habit.id];
-                  const isToday = isSameDay(date, new Date());
-                  const isFuture = date > new Date() && !isToday;
-                  const isPast = date < new Date() && !isToday;
+                  const isToday = isSameDay(date, today);
+                  const isFuture = date > today && !isToday;
+                  const isPast = date < today && !isToday;
                   const isMissed = isPast && !isCompleted;
 
                   return (

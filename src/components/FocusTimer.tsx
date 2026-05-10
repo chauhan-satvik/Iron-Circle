@@ -33,9 +33,10 @@ import { useTimerStore } from '../lib/timerStore';
 
 interface FocusTimerProps {
   profile: UserProfile;
+  today: Date;
 }
 
-export default function FocusTimer({ profile }: FocusTimerProps) {
+export default function FocusTimer({ profile, today }: FocusTimerProps) {
   const { 
     endTime, 
     isRunning, 
@@ -89,11 +90,11 @@ export default function FocusTimer({ profile }: FocusTimerProps) {
     if (!auth.currentUser) return;
 
     const focusRef = collection(db, 'groups', profile.groupId, 'users', auth.currentUser.uid, 'focusSessions');
-    const today = format(new Date(), 'yyyy-MM-dd');
+    const todayStr = format(today, 'yyyy-MM-dd');
     
     const q = query(
       focusRef,
-      where('date', '==', today),
+      where('date', '==', todayStr),
       orderBy('createdAt', 'desc')
     );
 
@@ -109,7 +110,7 @@ export default function FocusTimer({ profile }: FocusTimerProps) {
     });
 
     return () => unsubscribe();
-  }, [profile.groupId]);
+  }, [profile.groupId, today]);
 
   const handleComplete = async () => {
     completeTimer();
@@ -136,7 +137,7 @@ export default function FocusTimer({ profile }: FocusTimerProps) {
           transaction.set(doc(focusRef), {
             userId: userId,
             duration: durationInMinutes,
-            date: format(new Date(), 'yyyy-MM-dd'),
+            date: format(today, 'yyyy-MM-dd'),
             completed: true,
             createdAt: Date.now()
           });

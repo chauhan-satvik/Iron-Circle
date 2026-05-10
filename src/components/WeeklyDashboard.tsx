@@ -25,19 +25,23 @@ import DistributionChart from './DistributionChart';
 import { Sparkles, Zap, Shield, Flame, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+import { calculateUserXP, calculateHabitStreak, calculateWeeklyProgress, calculateConsistency } from '../lib/habitEngine';
+
 interface WeeklyDashboardProps {
   profile: UserProfile;
+  today: Date;
 }
 
-export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
+export default function WeeklyDashboard({ profile, today }: WeeklyDashboardProps) {
   const [habits, setHabits] = useState<Habit[]>([]);
-  const [weekCompletions, setWeekCompletions] = useState<Record<string, DayCompletion>>({});
+  const [allCompletions, setAllCompletions] = useState<DayCompletion[]>([]);
   const [loading, setLoading] = useState(true);
   const [xpPopups, setXpPopups] = useState<{ id: number; amount: number; x: number; y: number }[]>([]);
   
-  const currentWeekDays = getDaysOfWeek(new Date());
+  const currentWeekDays = getDaysOfWeek(today);
 
   useEffect(() => {
+    setLoading(true);
     // 1. Listen to habits
     const habitsPath = `groups/${profile.groupId}/users/${profile.uid}/habits`;
     const unsubscribeHabits = onSnapshot(collection(db, habitsPath), (snap) => {
@@ -47,18 +51,12 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
       handleFirestoreError(error, OperationType.GET, habitsPath);
     });
 
-    // 2. Listen to completions for the current week
+    // 2. Listen to ALL completions for the user
     const completionsPath = `groups/${profile.groupId}/users/${profile.uid}/completions`;
-    const dateIds = currentWeekDays.map(d => format(d, 'yyyy-MM-dd'));
     
     const unsubscribeCompletions = onSnapshot(collection(db, completionsPath), (snap) => {
-      const c: Record<string, DayCompletion> = {};
-      snap.docs.forEach(d => {
-        if (dateIds.includes(d.id)) {
-          c[d.id] = { ...d.data(), id: d.id } as DayCompletion;
-        }
-      });
-      setWeekCompletions(c);
+      const c = snap.docs.map(d => ({ ...d.data(), id: d.id } as DayCompletion));
+      setAllCompletions(c);
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, completionsPath);
@@ -68,7 +66,7 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
       unsubscribeHabits();
       unsubscribeCompletions();
     };
-  }, [profile.uid, profile.groupId]);
+  }, [profile.uid, profile.groupId, today]);
 
   const handleAddHabit = async (name: string, difficulty: HabitDifficulty, type: HabitType, target: number) => {
     const habitsPath = `groups/${profile.groupId}/users/${profile.uid}/habits`;
@@ -116,7 +114,7 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
     e?.stopPropagation();
     
     // Security check: Only allow today's date
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const todayStr = format(today, 'yyyy-MM-dd');
     if (dateStr !== todayStr) {
       console.warn("Retrospective or future habit manipulation detected and blocked.");
       return;
@@ -130,15 +128,6 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
     const nestedUserRef = doc(db, 'groups', profile.groupId, 'users', profile.uid);
 
     try {
-      // Fetch all habits and completions for full recalculation BEFORE transaction
-      const habitsPath = `groups/${profile.groupId}/users/${profile.uid}/habits`;
-      const completionsPath = `groups/${profile.groupId}/users/${profile.uid}/completions`;
-      
-      const [habitsSnap, completionsSnap] = await Promise.all([
-        getDocs(collection(db, habitsPath)),
-        getDocs(collection(db, completionsPath))
-      ]);
-
       await runTransaction(db, async (transaction) => {
         const habitSnap = await transaction.get(habitRef);
         const userSnap = await transaction.get(userRef);
@@ -148,8 +137,6 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
 
         const habitData = habitSnap.data() as Habit;
         const userData = userSnap.data() as UserProfile;
-        const allHabits = habitsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Habit));
-        const allCompletions = completionsSnap.docs.map(d => ({ id: d.id, ...d.data() } as DayCompletion));
 
         const completionData = completionSnap.exists() 
           ? (completionSnap.data() as DayCompletion) 
@@ -160,40 +147,16 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
         
         if (!isAdding) delete newCompletions[habitId];
 
-        // Prepare this day's update
+        // XP Update
         const xpDelta = isAdding ? habitData.xpValue : -habitData.xpValue;
-        const updatedDayCompletions = newCompletions;
-
-        // Recalculate total XP from all logs
         const newTotalXp = Math.max(0, (userData.xp || 0) + xpDelta);
         const newLevel = Math.floor(Math.sqrt(newTotalXp / 100));
 
         transaction.set(completionRef, {
           ...completionData,
-          completions: updatedDayCompletions,
+          completions: newCompletions,
           xpEarned: (completionData.xpEarned || 0) + xpDelta
         });
-
-        // Streak logic
-        let newHabitStreak = habitData.currentStreak || 0;
-        let lastCompletedDate = habitData.lastCompletedDate;
-        const todayStr = format(new Date(), 'yyyy-MM-dd');
-        const yesterdayStr = format(subDays(new Date(), 1), 'yyyy-MM-dd');
-
-        if (dateStr === todayStr) {
-          if (isAdding) {
-            if (lastCompletedDate === yesterdayStr) {
-              newHabitStreak += 1;
-            } else if (lastCompletedDate !== todayStr) {
-              newHabitStreak = 1;
-            }
-            lastCompletedDate = todayStr;
-          } else {
-            newHabitStreak = Math.max(0, newHabitStreak - 1);
-            lastCompletedDate = yesterdayStr; 
-          }
-        }
-        const newBestStreak = Math.max(habitData.bestStreak || 0, newHabitStreak);
 
         const userUpdates = {
           xp: newTotalXp,
@@ -205,15 +168,21 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
         transaction.update(userRef, userUpdates);
         transaction.update(nestedUserRef, userUpdates);
 
-        transaction.update(habitRef, {
-          currentStreak: newHabitStreak,
-          bestStreak: newBestStreak,
-          lastCompletedDate: lastCompletedDate || ''
-        });
-
-        if (isAdding && dateStr === todayStr) {
-          setFeedback({ xp: habitData.xpValue, streak: newHabitStreak, habitId });
-          setTimeout(() => setFeedback(null), 3000);
+        // We no longer update streaks in the habit document via transaction.
+        // They are derived in real-time by the dashboard components.
+        
+        if (isAdding) {
+          const rect = (e?.target as HTMLElement)?.getBoundingClientRect();
+          const popup = {
+            id: Date.now(),
+            amount: habitData.xpValue,
+            x: rect ? rect.left : window.innerWidth / 2,
+            y: rect ? rect.top : window.innerHeight / 2
+          };
+          setXpPopups(prev => [...prev, popup]);
+          setTimeout(() => {
+            setXpPopups(prev => prev.filter(p => p.id !== popup.id));
+          }, 1000);
         }
       });
     } catch (e) {
@@ -221,11 +190,15 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
     }
   };
 
-  // Weekly Consistency Calculation (Count-Based)
+  // Derived Stats Calculation
+  const weekCompletions = allCompletions.filter(c => currentWeekDays.map(d => format(d, 'yyyy-MM-dd')).includes(c.date));
+  const weekCompletionsRecord: Record<string, DayCompletion> = {};
+  weekCompletions.forEach(c => { weekCompletionsRecord[c.date] = c; });
+
   const totalPossibleHabitCompletions = habits.length * 7;
   let completedHabitCount = 0;
   
-  Object.values(weekCompletions).forEach((day: DayCompletion) => {
+  weekCompletions.forEach((day: DayCompletion) => {
     if (day.completions) {
       habits.forEach(h => {
         if (day.completions[h.id]) {
@@ -236,7 +209,6 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
   });
 
   const weeklyConsistency = totalPossibleHabitCompletions > 0 ? completedHabitCount / totalPossibleHabitCompletions : 0;
-
   const missedHabitCount = Math.max(0, totalPossibleHabitCompletions - completedHabitCount);
 
   const performanceChartData = [
@@ -246,7 +218,7 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
 
   const chartData = currentWeekDays.map(d => {
     const ds = format(d, 'yyyy-MM-dd');
-    const dayComp = weekCompletions[ds];
+    const dayComp = weekCompletionsRecord[ds];
     
     let dayCompletedCount = 0;
     if (dayComp && dayComp.completions) {
@@ -343,7 +315,7 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
           transition={{ delay: 0.1 }}
           className="lg:col-span-12 xl:col-span-5 2xl:col-span-4"
         >
-          <Leaderboard groupId={profile.groupId} />
+          <Leaderboard groupId={profile.groupId} today={today} />
         </motion.div>
       </div>
 
@@ -351,18 +323,20 @@ export default function WeeklyDashboard({ profile }: WeeklyDashboardProps) {
         <div className="xl:col-span-4 2xl:col-span-3">
           <HabitRegistry 
             habits={habits}
-            todayCompletions={weekCompletions[format(new Date(), 'yyyy-MM-dd')]?.completions || {}}
+            completions={allCompletions}
+            today={today}
             onAddHabit={handleAddHabit}
             onUpdateHabit={handleUpdateHabit}
             onDeleteHabit={handleDeleteHabit}
-            onToggleHabit={(id, e) => handleToggleHabit(id, format(new Date(), 'yyyy-MM-dd'), e)}
+            onToggleHabit={(id, e) => handleToggleHabit(id, format(today, 'yyyy-MM-dd'), e)}
           />
         </div>
         <div className="xl:col-span-8 2xl:col-span-9">
           <HabitGrid 
             habits={habits}
-            days={weekCompletions}
+            days={weekCompletionsRecord}
             onToggleCell={(id, date) => handleToggleHabit(id, date)}
+            today={today}
           />
         </div>
       </div>

@@ -15,26 +15,17 @@ export function getWeekId(date: Date) {
 }
 
 export function getDaysOfWeek(date: Date) {
-  const start = new Date(date);
-  const day = start.getDay();
-  const diff = start.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
-  const monday = new Date(start.setDate(diff));
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay(); // 0 (Sun) to 6 (Sat)
+  const diff = d.getDate() - day;
+  const sunday = new Date(d.setDate(diff));
   
-  const days = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    days.push(d);
-  }
-  // Adjust back to start from Sunday if requested "Sunday to Saturday"
-  // Request: "7 columns (Sunday to Saturday)"
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() - 1);
   const week = [];
   for (let i = 0; i < 7; i++) {
-    const d = new Date(sunday);
-    d.setDate(sunday.getDate() + i);
-    week.push(d);
+    const day = new Date(sunday);
+    day.setDate(sunday.getDate() + i);
+    week.push(day);
   }
   return week;
 }

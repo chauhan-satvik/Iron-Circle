@@ -16,8 +16,11 @@ import { cn, getDaysOfWeek } from '../lib/utils';
 import Avatar from './Avatar';
 import { format, startOfDay } from 'date-fns';
 
+import { calculateUserXP, calculateConsistency } from '../lib/habitEngine';
+
 interface LeaderboardProps {
   groupId: string;
+  today: Date;
 }
 
 interface UserState {
@@ -27,56 +30,11 @@ interface UserState {
   focusSessions: FocusSession[];
 }
 
-export default function Leaderboard({ groupId }: LeaderboardProps) {
+export default function Leaderboard({ groupId, today }: LeaderboardProps) {
   const [userStates, setUserStates] = useState<Record<string, UserState>>({});
   const [loading, setLoading] = useState(true);
-  const currentWeekDays = useMemo(() => getDaysOfWeek(new Date()), []);
-
-  // Utility to calculate XP dynamically
-  const calculateUserXP = (habits: Habit[], completions: DayCompletion[], focusSessions: FocusSession[]) => {
-    let total = 0;
-    // Habit XP
-    completions.forEach(day => {
-      if (day.completions) {
-        Object.entries(day.completions).forEach(([habitId, completed]) => {
-          if (completed) {
-            const habit = habits.find(h => h.id === habitId);
-            if (habit) total += (habit.xpValue || 0);
-          }
-        });
-      }
-    });
-
-    // Focus Session XP: duration * 2
-    focusSessions.forEach(session => {
-      if (session.completed) {
-        total += (session.duration * 2);
-      }
-    });
-
-    return total;
-  };
-
-  // Utility to calculate consistency
-  const calculateConsistency = (habits: Habit[], completions: DayCompletion[]) => {
-    if (habits.length === 0) return 0;
-    const weekDateStrs = currentWeekDays.map(d => format(d, 'yyyy-MM-dd'));
-    const weekCompletions = completions.filter(d => weekDateStrs.includes(d.date));
-    
-    let completedCount = 0;
-    weekCompletions.forEach(day => {
-      if (day.completions && typeof day.completions === 'object') {
-        Object.entries(day.completions).forEach(([habitId, completed]) => {
-          if (completed && habits.some(h => h.id === habitId)) {
-            completedCount++;
-          }
-        });
-      }
-    });
-
-    const totalPossible = habits.length * 7;
-    return (completedCount / totalPossible) * 100;
-  };
+  const currentWeekDays = useMemo(() => getDaysOfWeek(today), [today]);
+  const todayStr = useMemo(() => format(today, 'yyyy-MM-dd'), [today]);
 
   useEffect(() => {
     setLoading(true);
@@ -184,16 +142,29 @@ export default function Leaderboard({ groupId }: LeaderboardProps) {
     return (Object.entries(userStates) as [string, UserState][])
       .map(([uid, state]) => {
         if (!state || !state.profile) return null;
+        
+        // Calculate dynamic values for each user
+        const habits = state.habits || [];
+        const completions = state.completions || [];
+        const focusSessions = state.focusSessions || [];
+        
+        let avgConsistency = 0;
+        if (habits.length > 0) {
+          const totalConsistency = habits.reduce((acc, h) => acc + calculateConsistency(h.id, completions, h.createdAt, todayStr), 0);
+          avgConsistency = totalConsistency / habits.length;
+        }
+
         return {
           ...state.profile,
           uid: state.profile.uid || uid,
-          calculatedXp: calculateUserXP(state.habits || [], state.completions || [], state.focusSessions || []),
-          consistency: calculateConsistency(state.habits || [], state.completions || [])
+          calculatedXp: calculateUserXP(habits, completions, focusSessions),
+          consistency: avgConsistency
         };
       })
       .filter((entry): entry is any => entry !== null)
       .sort((a, b) => (b.calculatedXp || 0) - (a.calculatedXp || 0) || (b.consistency || 0) - (a.consistency || 0));
-  }, [userStates]);
+  }, [userStates, todayStr]);
+
 
   if (loading && sortedEntries.length === 0) return (
     <div className="bg-bg-card rounded-xl border border-border-main p-8 flex items-center justify-center h-full min-h-[400px]">

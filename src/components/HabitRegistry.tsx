@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Habit, HabitDifficulty, HabitType } from '../types';
-import { Plus, Target, ChevronRight, Hash, Calendar, Layers, Info } from 'lucide-react';
+import { Habit, HabitDifficulty, HabitType, DayCompletion } from '../types';
+import { Plus, Target, Hash } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import HabitItem from './HabitItem';
+import { format } from 'date-fns';
 
 interface HabitRegistryProps {
   habits: Habit[];
@@ -11,17 +12,29 @@ interface HabitRegistryProps {
   onUpdateHabit: (habitId: string, updates: Partial<Habit>) => void;
   onDeleteHabit: (habitId: string) => void;
   onToggleHabit: (habitId: string, e: React.MouseEvent) => void;
-  todayCompletions: Record<string, boolean>;
+  completions: DayCompletion[];
+  today: Date;
 }
 
-export default function HabitRegistry({ habits, onAddHabit, onUpdateHabit, onDeleteHabit, onToggleHabit, todayCompletions }: HabitRegistryProps) {
+export default function HabitRegistry({ 
+  habits, 
+  onAddHabit, 
+  onUpdateHabit, 
+  onDeleteHabit, 
+  onToggleHabit, 
+  completions,
+  today 
+}: HabitRegistryProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [difficulty, setDifficulty] = useState<HabitDifficulty>('medium');
   const [type, setType] = useState<HabitType>('daily');
   const [target, setTarget] = useState(3);
 
-  const MAX_HABITS = 10;
+  const todayStr = format(today, 'yyyy-MM-dd');
+  const todayCompletions = completions.find(c => c.date === todayStr)?.completions || {};
+
+  const MAX_HABITS = 6;
   const canAdd = habits.length < MAX_HABITS;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -172,6 +185,8 @@ export default function HabitRegistry({ habits, onAddHabit, onUpdateHabit, onDel
               key={habit.id} 
               habit={habit}
               isCompletedToday={!!todayCompletions[habit.id]}
+              completions={completions}
+              today={today}
               onToggleToday={(e) => onToggleHabit(habit.id, e)}
               onUpdate={(updates) => onUpdateHabit(habit.id, updates)}
               onDelete={() => onDeleteHabit(habit.id)}

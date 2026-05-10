@@ -1,22 +1,36 @@
 import React, { useState } from 'react';
-import { Habit } from '../types';
+import { Habit, DayCompletion } from '../types';
 import { Flame, Star, Zap, TrendingUp, CheckCircle2, MoreVertical, Trash2, Edit2, Calendar, Layers } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, getDaysOfWeek } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { calculateHabitStreak, calculateWeeklyProgress } from '../lib/habitEngine';
 
 interface HabitItemProps {
   habit: Habit;
   onToggleToday: (e: React.MouseEvent) => void;
   isCompletedToday: boolean;
+  completions: DayCompletion[];
+  today: Date;
   onUpdate: (updates: Partial<Habit>) => void;
   onDelete: () => void;
   key?: React.Key;
 }
 
-export default function HabitItem({ habit, onToggleToday, isCompletedToday, onUpdate, onDelete }: HabitItemProps) {
+export default function HabitItem({ 
+  habit, 
+  onToggleToday, 
+  isCompletedToday, 
+  completions,
+  today,
+  onUpdate, 
+  onDelete 
+}: HabitItemProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const derivedStreak = calculateHabitStreak(habit.id, completions, today);
+  const weeklyProgress = calculateWeeklyProgress(habit.id, completions, getDaysOfWeek(today));
   const [editData, setEditData] = useState({
     name: habit.name,
     difficulty: habit.difficulty,
@@ -105,13 +119,13 @@ export default function HabitItem({ habit, onToggleToday, isCompletedToday, onUp
             <div className="mt-2 flex items-center gap-2">
               <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
                 <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(100, (habit.currentStreak / habit.target) * 100)}%` }}
-                  className="h-full bg-accent shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+                   initial={{ width: 0 }}
+                   animate={{ width: `${Math.min(100, (weeklyProgress / habit.target) * 100)}%` }}
+                   className="h-full bg-accent shadow-[0_0_8px_rgba(59,130,246,0.5)]"
                 />
               </div>
               <span className="text-[8px] font-black text-white/30 tracking-tighter">
-                {habit.currentStreak}/{habit.target}
+                {weeklyProgress}/{habit.target}
               </span>
             </div>
           )}
@@ -166,10 +180,10 @@ export default function HabitItem({ habit, onToggleToday, isCompletedToday, onUp
 
           <div className={cn(
             "flex items-center gap-1.5 px-2 py-1 rounded-lg border",
-            habit.currentStreak > 0 ? "bg-orange-500/10 border-orange-500/20 text-orange-500" : "bg-white/5 border-white/5 text-white/20"
+            derivedStreak > 0 ? "bg-orange-500/10 border-orange-500/20 text-orange-500" : "bg-white/5 border-white/5 text-white/20"
           )}>
-            <Flame className={cn("w-3.5 h-3.5", habit.currentStreak > 0 && "fill-current animate-pulse")} />
-            <span className="text-xs font-black italic">{habit.currentStreak}</span>
+            <Flame className={cn("w-3.5 h-3.5", derivedStreak > 0 && "fill-current animate-pulse")} />
+            <span className="text-xs font-black italic">{derivedStreak}</span>
           </div>
         </div>
       </motion.div>

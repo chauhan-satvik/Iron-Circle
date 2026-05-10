@@ -24,13 +24,14 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react
 import { auth, db } from '../firebase';
 import { cn } from '../lib/utils';
 import { handleFirestoreError, OperationType } from '../lib/firestoreError';
-import { UserProfile, Group } from '../types';
-import { format } from 'date-fns';
+import { UserProfile, Group, Habit, DayCompletion, FocusSession } from '../types';
+import { format, isSameDay } from 'date-fns';
 import WeeklyDashboard from './WeeklyDashboard';
 import FocusTimer from './FocusTimer';
 import Avatar from './Avatar';
 import ProfilePanel from './ProfilePanel';
-import { LogIn, LogOut, Shield, Trash2, X, AlertTriangle, User as UserIcon, Hash, Palette, Flame, LayoutDashboard, Timer } from 'lucide-react';
+import { calculateUserXP, calculateGlobalStreak } from '../lib/habitEngine';
+import { LogIn, LogOut, Shield, Trash2, X, AlertTriangle, User as UserIcon, Hash, Palette, Flame, LayoutDashboard, Timer, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 function Navigation() {
@@ -66,6 +67,9 @@ function Navigation() {
 export default function AuthWrapper() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [allCompletions, setAllCompletions] = useState<DayCompletion[]>([]);
+  const [focusSessions, setFocusSessions] = useState<FocusSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -79,67 +83,119 @@ export default function AuthWrapper() {
   const [selectedColor, setSelectedColor] = useState('#3B82F6');
   const [isSavingName, setIsSavingName] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [today, setToday] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      setToday(prev => {
+        if (!isSameDay(now, prev)) {
+          return now;
+        }
+        return prev;
+      });
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4'];
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
-      if (firebaseUser) {
-        // Fetch profile
-    const userRef = doc(db, 'users', firebaseUser.uid);
-    const userSnap = await getDoc(userRef);
-    
-    if (userSnap.exists()) {
-      const profileData = userSnap.data() as UserProfile;
-      setProfile(profileData);
-      
-      const groupId = profileData.groupId || 'default-circle';
-      const nestedUserRef = doc(db, 'groups', groupId, 'users', firebaseUser.uid);
-
-      if (!profileData.displayName || profileData.displayName === 'Anon' || !profileData.username) {
-        setShowNameModal(true);
-        setTempName(profileData.displayName || '');
-        setTempUsername(profileData.username || '');
-        setSelectedColor(profileData.avatar?.color || '#3B82F6');
-      }
-
-      // Streak Decay Check
-      const todayId = format(new Date(), 'yyyy-MM-dd');
-      const yesterdayId = format(new Date(Date.now() - 86400000), 'yyyy-MM-dd');
-      
-      const lastActiveDate = format(new Date(profileData.lastActive || 0), 'yyyy-MM-dd');
-      if (lastActiveDate !== todayId && lastActiveDate !== yesterdayId) {
-         const updates = { globalStreak: 0, lastActive: Date.now() };
-         await setDoc(userRef, updates, { merge: true });
-         await setDoc(nestedUserRef, updates, { merge: true });
-      } else {
-         await setDoc(userRef, { lastActive: Date.now() }, { merge: true });
-         await setDoc(nestedUserRef, { lastActive: Date.now() }, { merge: true });
-      }
-    } else {
-      setShowNameModal(true);
-    }
-
-        // Listen to profile changes real-time
-        onSnapshot(userRef, (snap) => {
-          if (snap.exists()) {
-            const data = snap.data() as UserProfile;
-            setProfile(data);
-            if (data.displayName && data.displayName !== 'Anon' && data.username) {
-              setShowNameModal(false);
-            }
-          }
-        });
-      } else {
+      if (!firebaseUser) {
         setProfile(null);
+        setHabits([]);
+        setAllCompletions([]);
+        setFocusSessions([]);
         setShowNameModal(false);
+        setLoading(false);
       }
-      setLoading(false);
     });
-
-    return () => unsubscribe();
+    return () => unsubscribeAuth();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let unsubProfile: (() => void) | undefined;
+    let unsubHabits: (() => void) | undefined;
+    let unsubCompletions: (() => void) | undefined;
+    let unsubFocus: (() => void) | undefined;
+
+    const setupListeners = async () => {
+      const userRef = doc(db, 'users', user.uid);
+      const userSnap = await getDoc(userRef);
+      
+      let groupId = 'default-circle';
+
+      if (userSnap.exists()) {
+        const profileData = userSnap.data() as UserProfile;
+        setProfile(profileData);
+        groupId = profileData.groupId || 'default-circle';
+        
+        if (!profileData.displayName || profileData.displayName === 'Anon' || !profileData.username) {
+          setShowNameModal(true);
+          setTempName(profileData.displayName || '');
+          setTempUsername(profileData.username || '');
+          setSelectedColor(profileData.avatar?.color || '#3B82F6');
+        }
+
+        const todayId = format(today, 'yyyy-MM-dd');
+        const yesterdayId = format(new Date(today.getTime() - 86400000), 'yyyy-MM-dd');
+        const lastActiveDate = format(new Date(profileData.lastActive || 0), 'yyyy-MM-dd');
+        
+        const nestedUserRef = doc(db, 'groups', groupId, 'users', user.uid);
+
+        if (lastActiveDate !== todayId && lastActiveDate !== yesterdayId) {
+           const updates = { globalStreak: 0, lastActive: Date.now() };
+           await setDoc(userRef, updates, { merge: true });
+           await setDoc(nestedUserRef, updates, { merge: true });
+        } else {
+           await setDoc(userRef, { lastActive: Date.now() }, { merge: true });
+           await setDoc(nestedUserRef, { lastActive: Date.now() }, { merge: true });
+        }
+      } else {
+        setShowNameModal(true);
+      }
+
+      unsubProfile = onSnapshot(userRef, (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as UserProfile;
+          setProfile(data);
+          if (data.displayName && data.displayName !== 'Anon' && data.username) {
+            setShowNameModal(false);
+          }
+        }
+      });
+
+      const habitsRef = collection(db, 'groups', groupId, 'users', user.uid, 'habits');
+      unsubHabits = onSnapshot(habitsRef, (snap) => {
+        setHabits(snap.docs.map(d => ({ ...d.data(), id: d.id } as Habit)));
+      });
+
+      const completionsRef = collection(db, 'groups', groupId, 'users', user.uid, 'completions');
+      unsubCompletions = onSnapshot(completionsRef, (snap) => {
+        setAllCompletions(snap.docs.map(d => ({ ...d.data(), id: d.id } as DayCompletion)));
+      });
+
+      const focusRef = collection(db, 'groups', groupId, 'users', user.uid, 'focusSessions');
+      unsubFocus = onSnapshot(focusRef, (snap) => {
+        setFocusSessions(snap.docs.map(d => ({ ...d.data(), id: d.id } as FocusSession)));
+      });
+
+      setLoading(false);
+    };
+
+    setupListeners();
+
+    return () => {
+      unsubProfile?.();
+      unsubHabits?.();
+      unsubCompletions?.();
+      unsubFocus?.();
+    };
+  }, [user]);
 
   const handleSaveName = async () => {
     if (!user || !tempName.trim() || !tempUsername.trim()) return;
@@ -299,6 +355,10 @@ export default function AuthWrapper() {
     }
   };
 
+  const derivedXp = calculateUserXP(habits, allCompletions, focusSessions);
+  const derivedGlobalStreak = calculateGlobalStreak(allCompletions, today);
+  const derivedLevel = Math.floor(Math.sqrt(derivedXp / 100));
+
   if (loading) {
     return (
       <div className="min-h-screen bg-bg-main flex items-center justify-center">
@@ -404,16 +464,16 @@ export default function AuthWrapper() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 sm:gap-6">
+                <div className="flex items-center gap-2 sm:gap-6">
                 <div className="hidden lg:flex flex-col items-end gap-2">
                   <div className="flex items-center gap-3">
                     <span className="text-[10px] font-black text-text-dim/60 uppercase tracking-wider tabular-nums">
-                      {profile?.xp?.toLocaleString()} XP
+                      {derivedXp.toLocaleString()} XP
                     </span>
                     <div className="w-32 h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5">
                       <motion.div 
                         initial={{ width: 0 }}
-                        animate={{ width: `${(profile?.xp || 0) % 100}%` }}
+                        animate={{ width: `${derivedXp % 100}%` }}
                         className="h-full bg-accent shadow-[0_0_10px_rgba(59,130,246,0.6)]"
                       />
                     </div>
@@ -421,14 +481,14 @@ export default function AuthWrapper() {
                 </div>
 
                 <div className="flex items-center gap-2 sm:gap-3">
-                  {(profile?.globalStreak || 0) > 0 && (
+                  {derivedGlobalStreak > 0 && (
                     <motion.div 
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
                       className="flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 sm:py-1.5 bg-orange-500/10 border border-orange-500/20 rounded-lg sm:rounded-xl shrink-0"
                     >
                       <Flame className="w-3 sm:w-4 h-3 sm:h-4 text-orange-500 fill-current animate-pulse" />
-                      <span className="text-[9px] sm:text-xs font-black text-orange-500 italic uppercase">{(profile?.globalStreak || 0)}</span>
+                      <span className="text-[9px] sm:text-xs font-black text-orange-500 italic uppercase">{derivedGlobalStreak}</span>
                     </motion.div>
                   )}
                   <div className="w-px h-6 sm:h-8 bg-white/5 mx-0.5 sm:mx-1 hidden sm:block" />
@@ -454,12 +514,19 @@ export default function AuthWrapper() {
               {(profile && profile.displayName && profile.displayName !== 'Anon') ? (
                 <>
                   <Routes>
-                    <Route path="/" element={<WeeklyDashboard profile={profile} />} />
-                    <Route path="/focus" element={<FocusTimer profile={profile} />} />
+                    <Route path="/" element={<WeeklyDashboard profile={profile} today={today} />} />
+                    <Route path="/focus" element={<FocusTimer profile={profile} today={today} />} />
                   </Routes>
                   <Navigation />
                   <ProfilePanel 
                     profile={profile} 
+                    habits={habits}
+                    completions={allCompletions}
+                    focusSessions={focusSessions}
+                    derivedXp={derivedXp}
+                    derivedLevel={derivedLevel}
+                    globalStreak={derivedGlobalStreak}
+                    today={today}
                     isOpen={isProfileOpen} 
                     onClose={() => setIsProfileOpen(false)} 
                     onLogout={logout}
@@ -475,6 +542,31 @@ export default function AuthWrapper() {
                 </div>
               )}
             </main>
+
+            <footer className="max-w-screen-2xl mx-auto px-8 py-12 pb-32 border-t border-white/[0.03] opacity-40">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center">
+                    <Shield className="w-4 h-4 text-accent" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-white">Iron Circle</div>
+                    <div className="text-[8px] font-medium text-text-dim uppercase tracking-wider">Tactical Habit Protocol</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 px-4 py-2 bg-white/[0.02] border border-white/5 rounded-full">
+                  <Clock className="w-3 h-3 text-accent" />
+                  <span className="text-[9px] font-black uppercase tracking-tighter text-text-dim">
+                    System Hub Updated: <span className="text-white">May 10, 2026 • 15:24 UTC</span>
+                  </span>
+                </div>
+
+                <div className="text-[9px] font-black uppercase tracking-[0.3em] text-white/20">
+                  © 2026 Neural Grid Labs
+                </div>
+              </div>
+            </footer>
           </motion.div>
         )}
       </AnimatePresence>
