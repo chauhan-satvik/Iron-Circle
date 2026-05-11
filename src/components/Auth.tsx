@@ -554,7 +554,7 @@ export default function AuthWrapper() {
                 <div className="flex items-center gap-2 px-4 py-2 bg-white/[0.02] border border-white/5 rounded-full">
                   <Clock className="w-3 h-3 text-accent" />
                   <span className="text-[9px] font-black uppercase tracking-tighter text-text-dim">
-                    System Hub Updated: <span className="text-white">May 11, 2026 • 18 : 49 IST</span>
+                    System Hub Updated: <span className="text-white">May 11, 2026 • 19:02 IST</span>
                   </span>
                 </div>
 
