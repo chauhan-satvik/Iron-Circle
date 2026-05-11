@@ -9,14 +9,14 @@ import {
   runTransaction
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { UserProfile, DayCompletion, Habit, Group, FocusSession } from '../types';
+import { UserProfile, Habit, Group, FocusSession } from '../types';
 import { Trophy, Crown, Zap, Flame, Shield, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, getDaysOfWeek } from '../lib/utils';
 import Avatar from './Avatar';
 import { format, startOfDay } from 'date-fns';
 
-import { calculateUserXP, calculateConsistency } from '../lib/habitEngine';
+import { calculateUserXP, calculateWeeklyConsistency, calculateGlobalStreak } from '../lib/habitEngine';
 
 interface LeaderboardProps {
   groupId: string;
@@ -26,7 +26,6 @@ interface LeaderboardProps {
 interface UserState {
   profile: UserProfile;
   habits: Habit[];
-  completions: DayCompletion[];
   focusSessions: FocusSession[];
 }
 
@@ -52,7 +51,7 @@ export default function Leaderboard({ groupId, today }: LeaderboardProps) {
           // Initialize state
           setUserStates(prev => ({
             ...prev,
-            [uid]: { profile: { ...profile, uid }, habits: [], completions: [], focusSessions: [] }
+            [uid]: { profile: { ...profile, uid }, habits: [], focusSessions: [] }
           }));
 
           // Set up habits listener
@@ -68,20 +67,6 @@ export default function Leaderboard({ groupId, today }: LeaderboardProps) {
             });
           }, (error) => console.error("Leaderboard habits error:", error));
           unsubMap[`${uid}_habits`] = habitsUnsub;
-
-          // Set up completions listener
-          const completionsRef = collection(db, 'groups', groupId, 'users', uid, 'completions');
-          const completionsUnsub = onSnapshot(completionsRef, (s) => {
-            const completions = s.docs.map(d => ({ id: d.id, ...d.data() } as DayCompletion));
-            setUserStates(prev => {
-              if (!prev[uid]) return prev;
-              return {
-                ...prev,
-                [uid]: { ...prev[uid], completions }
-              };
-            });
-          }, (error) => console.error("Leaderboard completions error:", error));
-          unsubMap[`${uid}_completions`] = completionsUnsub;
 
           // Set up focus sessions listener
           const focusRef = collection(db, 'groups', groupId, 'users', uid, 'focusSessions');
@@ -113,10 +98,6 @@ export default function Leaderboard({ groupId, today }: LeaderboardProps) {
             unsubMap[`${uid}_habits`]();
             delete unsubMap[`${uid}_habits`];
           }
-          if (unsubMap[`${uid}_completions`]) {
-            unsubMap[`${uid}_completions`]();
-            delete unsubMap[`${uid}_completions`];
-          }
           if (unsubMap[`${uid}_focus`]) {
             unsubMap[`${uid}_focus`]();
             delete unsubMap[`${uid}_focus`];
@@ -136,7 +117,7 @@ export default function Leaderboard({ groupId, today }: LeaderboardProps) {
       unsubscribeUsers();
       Object.values(unsubMap).forEach(unsub => unsub());
     };
-  }, [groupId, currentWeekDays]);
+  }, [groupId]);
 
   const sortedEntries = useMemo(() => {
     return (Object.entries(userStates) as [string, UserState][])
@@ -145,25 +126,21 @@ export default function Leaderboard({ groupId, today }: LeaderboardProps) {
         
         // Calculate dynamic values for each user
         const habits = state.habits || [];
-        const completions = state.completions || [];
         const focusSessions = state.focusSessions || [];
         
-        let avgConsistency = 0;
-        if (habits.length > 0) {
-          const totalConsistency = habits.reduce((acc, h) => acc + calculateConsistency(h.id, completions, h.createdAt, todayStr), 0);
-          avgConsistency = totalConsistency / habits.length;
-        }
+        const weeklyConsistency = calculateWeeklyConsistency(habits, currentWeekDays);
 
         return {
           ...state.profile,
           uid: state.profile.uid || uid,
-          calculatedXp: calculateUserXP(habits, completions, focusSessions),
-          consistency: avgConsistency
+          calculatedXp: calculateUserXP(habits, focusSessions),
+          consistency: weeklyConsistency,
+          calculatedStreak: calculateGlobalStreak(habits, today)
         };
       })
       .filter((entry): entry is any => entry !== null)
       .sort((a, b) => (b.calculatedXp || 0) - (a.calculatedXp || 0) || (b.consistency || 0) - (a.consistency || 0));
-  }, [userStates, todayStr]);
+  }, [userStates, today]);
 
 
   if (loading && sortedEntries.length === 0) return (
@@ -233,6 +210,7 @@ export default function Leaderboard({ groupId, today }: LeaderboardProps) {
                         size={isRank1 ? 'xl' : 'lg'}
                         showStatus
                         isOnline={isOnline}
+                        mood={entry.mood}
                         className="transition-transform duration-700 group-hover:scale-105"
                       />
                       <div className={cn(
@@ -251,7 +229,7 @@ export default function Leaderboard({ groupId, today }: LeaderboardProps) {
                         <span className="text-[10px] font-black text-accent uppercase tracking-widest">{entry.calculatedXp.toLocaleString()} XP</span>
                         <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-orange-500/10 rounded-md border border-orange-500/20">
                           <Flame className="w-3 h-3 text-orange-500 fill-current" />
-                          <span className="text-[9px] font-black text-orange-500 italic">{entry.globalStreak || 0}</span>
+                          <span className="text-[9px] font-black text-orange-500 italic">{entry.calculatedStreak || 0}</span>
                         </div>
                       </div>
                     </div>
@@ -281,7 +259,7 @@ export default function Leaderboard({ groupId, today }: LeaderboardProps) {
                 <div key={entry.uid} className="relative group flex flex-col sm:flex-row items-center gap-4 p-4 bg-white/[0.01] border border-white/5 rounded-2xl hover:bg-white/[0.03] transition-all">
                   <div className="flex items-center w-full sm:w-auto gap-4">
                     <span className="w-4 text-[10px] font-black text-text-dim/10 italic shrink-0">{rank}</span>
-                    <Avatar avatar={entry.avatar} name={entry.displayName || entry.name} size="md" />
+                    <Avatar avatar={entry.avatar} name={entry.displayName || entry.name} mood={entry.mood} size="md" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between sm:justify-start sm:gap-4">
                         <span className="text-sm font-black text-white/80 uppercase italic truncate">{entry.displayName || entry.name || 'Unknown'}</span>

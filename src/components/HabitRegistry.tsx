@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Habit, HabitDifficulty, HabitType, DayCompletion } from '../types';
+import { Habit, HabitDifficulty, HabitType } from '../types';
 import { Plus, Target, Hash } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -12,7 +12,6 @@ interface HabitRegistryProps {
   onUpdateHabit: (habitId: string, updates: Partial<Habit>) => void;
   onDeleteHabit: (habitId: string) => void;
   onToggleHabit: (habitId: string, e: React.MouseEvent) => void;
-  completions: DayCompletion[];
   today: Date;
 }
 
@@ -22,7 +21,6 @@ export default function HabitRegistry({
   onUpdateHabit, 
   onDeleteHabit, 
   onToggleHabit, 
-  completions,
   today 
 }: HabitRegistryProps) {
   const [isAdding, setIsAdding] = useState(false);
@@ -32,7 +30,6 @@ export default function HabitRegistry({
   const [target, setTarget] = useState(3);
 
   const todayStr = format(today, 'yyyy-MM-dd');
-  const todayCompletions = completions.find(c => c.date === todayStr)?.completions || {};
 
   const MAX_HABITS = 6;
   const canAdd = habits.length < MAX_HABITS;
@@ -184,8 +181,7 @@ export default function HabitRegistry({
             <HabitItem 
               key={habit.id} 
               habit={habit}
-              isCompletedToday={!!todayCompletions[habit.id]}
-              completions={completions}
+              isCompletedToday={!!habit.completions?.[todayStr]}
               today={today}
               onToggleToday={(e) => onToggleHabit(habit.id, e)}
               onUpdate={(updates) => onUpdateHabit(habit.id, updates)}

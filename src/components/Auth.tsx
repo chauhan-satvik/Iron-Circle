@@ -24,14 +24,15 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react
 import { auth, db } from '../firebase';
 import { cn } from '../lib/utils';
 import { handleFirestoreError, OperationType } from '../lib/firestoreError';
-import { UserProfile, Group, Habit, DayCompletion, FocusSession } from '../types';
+import { UserProfile, Group, Habit, FocusSession } from '../types';
 import { format, isSameDay } from 'date-fns';
 import WeeklyDashboard from './WeeklyDashboard';
 import FocusTimer from './FocusTimer';
 import Avatar from './Avatar';
 import ProfilePanel from './ProfilePanel';
+import HelpTour from './HelpTour';
 import { calculateUserXP, calculateGlobalStreak } from '../lib/habitEngine';
-import { LogIn, LogOut, Shield, Trash2, X, AlertTriangle, User as UserIcon, Hash, Palette, Flame, LayoutDashboard, Timer, Clock } from 'lucide-react';
+import { LogIn, LogOut, Shield, Trash2, X, AlertTriangle, User as UserIcon, Hash, Palette, Flame, LayoutDashboard, Timer, Clock, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 function Navigation() {
@@ -68,7 +69,6 @@ export default function AuthWrapper() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [habits, setHabits] = useState<Habit[]>([]);
-  const [allCompletions, setAllCompletions] = useState<DayCompletion[]>([]);
   const [focusSessions, setFocusSessions] = useState<FocusSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -80,9 +80,11 @@ export default function AuthWrapper() {
   const [showNameModal, setShowNameModal] = useState(false);
   const [tempName, setTempName] = useState('');
   const [tempUsername, setTempUsername] = useState('');
+  const [tempMood, setTempMood] = useState('');
   const [selectedColor, setSelectedColor] = useState('#3B82F6');
   const [isSavingName, setIsSavingName] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [today, setToday] = useState(new Date());
 
   useEffect(() => {
@@ -106,7 +108,6 @@ export default function AuthWrapper() {
       if (!firebaseUser) {
         setProfile(null);
         setHabits([]);
-        setAllCompletions([]);
         setFocusSessions([]);
         setShowNameModal(false);
         setLoading(false);
@@ -120,7 +121,6 @@ export default function AuthWrapper() {
 
     let unsubProfile: (() => void) | undefined;
     let unsubHabits: (() => void) | undefined;
-    let unsubCompletions: (() => void) | undefined;
     let unsubFocus: (() => void) | undefined;
 
     const setupListeners = async () => {
@@ -141,20 +141,9 @@ export default function AuthWrapper() {
           setSelectedColor(profileData.avatar?.color || '#3B82F6');
         }
 
-        const todayId = format(today, 'yyyy-MM-dd');
-        const yesterdayId = format(new Date(today.getTime() - 86400000), 'yyyy-MM-dd');
-        const lastActiveDate = format(new Date(profileData.lastActive || 0), 'yyyy-MM-dd');
-        
         const nestedUserRef = doc(db, 'groups', groupId, 'users', user.uid);
-
-        if (lastActiveDate !== todayId && lastActiveDate !== yesterdayId) {
-           const updates = { globalStreak: 0, lastActive: Date.now() };
-           await setDoc(userRef, updates, { merge: true });
-           await setDoc(nestedUserRef, updates, { merge: true });
-        } else {
-           await setDoc(userRef, { lastActive: Date.now() }, { merge: true });
-           await setDoc(nestedUserRef, { lastActive: Date.now() }, { merge: true });
-        }
+        await setDoc(userRef, { lastActive: Date.now() }, { merge: true });
+        await setDoc(nestedUserRef, { lastActive: Date.now() }, { merge: true });
       } else {
         setShowNameModal(true);
       }
@@ -174,11 +163,6 @@ export default function AuthWrapper() {
         setHabits(snap.docs.map(d => ({ ...d.data(), id: d.id } as Habit)));
       });
 
-      const completionsRef = collection(db, 'groups', groupId, 'users', user.uid, 'completions');
-      unsubCompletions = onSnapshot(completionsRef, (snap) => {
-        setAllCompletions(snap.docs.map(d => ({ ...d.data(), id: d.id } as DayCompletion)));
-      });
-
       const focusRef = collection(db, 'groups', groupId, 'users', user.uid, 'focusSessions');
       unsubFocus = onSnapshot(focusRef, (snap) => {
         setFocusSessions(snap.docs.map(d => ({ ...d.data(), id: d.id } as FocusSession)));
@@ -192,7 +176,6 @@ export default function AuthWrapper() {
     return () => {
       unsubProfile?.();
       unsubHabits?.();
-      unsubCompletions?.();
       unsubFocus?.();
     };
   }, [user]);
@@ -218,7 +201,8 @@ export default function AuthWrapper() {
           color: selectedColor
         },
         lastActive: now,
-        updatedAt: now
+        updatedAt: now,
+        mood: tempMood
       };
 
       if (!userSnap.exists()) {
@@ -311,20 +295,24 @@ export default function AuthWrapper() {
       const userRef = doc(db, 'users', user.uid);
       const profileData = profile;
 
-      // Delete all day entries across all weeks in their group
       if (profileData?.groupId) {
-        // This is a simplified cleanup. In a huge production app, you'd use a Cloud Function.
-        // For our scale, we'll fetch the user's specific subcollections.
-        const weeksRef = collection(db, 'groups', profileData.groupId, 'weeks');
-        const weeksSnap = await getDocs(weeksRef);
-        
-        for (const weekDoc of weeksSnap.docs) {
-          const daysRef = collection(db, 'groups', profileData.groupId, 'weeks', weekDoc.id, 'users', user.uid, 'days');
-          const daysSnap = await getDocs(daysRef);
-          for (const dayDoc of daysSnap.docs) {
-            await deleteDoc(dayDoc.ref);
-          }
+        // Delete all habits for the user (contains completions)
+        const habitsRef = collection(db, 'groups', profileData.groupId, 'users', user.uid, 'habits');
+        const habitsSnap = await getDocs(habitsRef);
+        for (const habitDoc of habitsSnap.docs) {
+          await deleteDoc(habitDoc.ref);
         }
+
+        // Delete all focus sessions
+        const focusRef = collection(db, 'groups', profileData.groupId, 'users', user.uid, 'focusSessions');
+        const focusSnap = await getDocs(focusRef);
+        for (const focusDoc of focusSnap.docs) {
+          await deleteDoc(focusDoc.ref);
+        }
+
+        // Remove from nested user profile
+        const nestedUserRef = doc(db, 'groups', profileData.groupId, 'users', user.uid);
+        await deleteDoc(nestedUserRef);
 
         // Remove from group members
         const groupRef = doc(db, 'groups', profileData.groupId);
@@ -355,8 +343,8 @@ export default function AuthWrapper() {
     }
   };
 
-  const derivedXp = calculateUserXP(habits, allCompletions, focusSessions);
-  const derivedGlobalStreak = calculateGlobalStreak(allCompletions, today);
+  const derivedXp = calculateUserXP(habits, focusSessions);
+  const derivedGlobalStreak = calculateGlobalStreak(habits, today);
   const derivedLevel = Math.floor(Math.sqrt(derivedXp / 100));
 
   if (loading) {
@@ -446,6 +434,7 @@ export default function AuthWrapper() {
                     avatar={profile?.avatar} 
                     name={profile?.displayName} 
                     size="md" 
+                    mood={profile?.mood}
                     className="ring-2 ring-white/5 group-hover:ring-accent/40 transition-all"
                   />
                   <div className="absolute -bottom-1 -right-1 bg-accent p-1 rounded-full shadow-lg sm:hidden">
@@ -465,6 +454,14 @@ export default function AuthWrapper() {
               </div>
 
                 <div className="flex items-center gap-2 sm:gap-6">
+                  <button 
+                    onClick={() => setIsHelpOpen(true)}
+                    className="p-2 sm:p-3 bg-white/[0.02] hover:bg-white/10 text-text-dim hover:text-white border border-white/5 rounded-xl sm:rounded-2xl transition-all duration-300 active:scale-90"
+                    title="System Protocol Help"
+                  >
+                    <Info className="w-4 sm:w-5 h-4 sm:h-5" />
+                  </button>
+
                 <div className="hidden lg:flex flex-col items-end gap-2">
                   <div className="flex items-center gap-3">
                     <span className="text-[10px] font-black text-text-dim/60 uppercase tracking-wider tabular-nums">
@@ -521,7 +518,6 @@ export default function AuthWrapper() {
                   <ProfilePanel 
                     profile={profile} 
                     habits={habits}
-                    completions={allCompletions}
                     focusSessions={focusSessions}
                     derivedXp={derivedXp}
                     derivedLevel={derivedLevel}
@@ -558,7 +554,7 @@ export default function AuthWrapper() {
                 <div className="flex items-center gap-2 px-4 py-2 bg-white/[0.02] border border-white/5 rounded-full">
                   <Clock className="w-3 h-3 text-accent" />
                   <span className="text-[9px] font-black uppercase tracking-tighter text-text-dim">
-                    System Hub Updated: <span className="text-white">May 10, 2026 • 8 : 55 IST</span>
+                    System Hub Updated: <span className="text-white">May 10, 2026 • 15:24 UTC</span>
                   </span>
                 </div>
 
@@ -692,6 +688,7 @@ export default function AuthWrapper() {
                     color: selectedColor 
                   }}
                   name={tempName}
+                  mood={tempMood}
                   size="xl"
                   className="shadow-[0_20px_50px_rgba(0,0,0,0.5)] border-4 border-bg-main"
                 />
@@ -765,6 +762,7 @@ export default function AuthWrapper() {
           </div>
         )}
       </AnimatePresence>
+      <HelpTour isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
     </div>
     </Router>
   );

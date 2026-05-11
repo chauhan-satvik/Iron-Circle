@@ -112,8 +112,52 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
     return () => unsubscribe();
   }, [profile.groupId, today]);
 
+  const playTacticalSound = (type: 'start' | 'pause' | 'switch' | 'complete') => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      const playTone = (freq: number, duration: number, vol = 0.05, oscType: OscillatorType = 'sine') => {
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.type = oscType;
+        oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+        gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + duration);
+      };
+
+      switch (type) {
+        case 'start':
+          playTone(880, 0.1);
+          break;
+        case 'pause':
+          playTone(440, 0.15);
+          break;
+        case 'switch':
+          playTone(660, 0.08);
+          setTimeout(() => playTone(880, 0.08), 50);
+          break;
+        case 'complete':
+          playTone(440, 0.2, 0.1);
+          setTimeout(() => playTone(660, 0.2, 0.1), 150);
+          setTimeout(() => playTone(880, 0.5, 0.1), 300);
+          break;
+      }
+    } catch (e) {
+      // Audio context might be blocked if no user interaction yet, ignore
+    }
+  };
+
   const handleComplete = async () => {
     completeTimer();
+    playTacticalSound('complete');
     
     if (mode === 'focus') {
       const durationInMinutes = Math.floor(FOCUS_TIME / 60);
@@ -126,13 +170,6 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
         const xpDelta = durationInMinutes * 2;
 
         await runTransaction(db, async (transaction) => {
-          const userSnap = await transaction.get(userRef);
-          if (!userSnap.exists()) return;
-          
-          const userData = userSnap.data() as UserProfile;
-          const newXp = (userData.xp || 0) + xpDelta;
-          const newLevel = Math.floor(Math.sqrt(newXp / 100));
-
           // Save session
           transaction.set(doc(focusRef), {
             userId: userId,
@@ -142,10 +179,8 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
             createdAt: Date.now()
           });
 
-          // Update user XP
+          // Update lastActive only
           const updates = {
-            xp: newXp,
-            level: newLevel,
             lastActive: Date.now()
           };
 
@@ -153,16 +188,12 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
           transaction.update(nestedUserRef, updates);
         });
 
-        // Trigger audio pulse
-        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-        audio.play().catch(() => {});
       } catch (error) {
         console.error("Failed to save focus session:", error);
       }
     }
 
     // Auto switch or alert
-    alert(mode === 'focus' ? "Focus session complete! Take a break." : "Break complete! Back to work.");
     setMode(mode === 'focus' ? 'break' : 'focus');
     setTimeLeft(mode === 'focus' ? BREAK_TIME : FOCUS_TIME);
   };
@@ -170,14 +201,20 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
   const toggleTimer = () => {
     if (isRunning) {
       pauseTimer();
+      playTacticalSound('pause');
     } else if (isPaused) {
       resumeTimer();
+      playTacticalSound('start');
     } else {
       startTimer(mode === 'focus' ? FOCUS_TIME : BREAK_TIME, mode);
+      playTacticalSound('start');
     }
   };
 
   const switchMode = (newMode: 'focus' | 'break') => {
+    if (newMode !== mode) {
+      playTacticalSound('switch');
+    }
     resetTimer();
     setMode(newMode);
     setTimeLeft(newMode === 'focus' ? FOCUS_TIME : BREAK_TIME);

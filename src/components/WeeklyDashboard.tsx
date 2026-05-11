@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreError';
-import { UserProfile, Habit, DayCompletion, HabitDifficulty, HabitType } from '../types';
+import { UserProfile, Habit, DayCompletion, HabitDifficulty, HabitType, FocusSession } from '../types';
 import { cn, getWeekId, getDaysOfWeek } from '../lib/utils';
 import { format, isSameDay, subDays, parseISO } from 'date-fns';
 import Chart from './Chart';
@@ -25,7 +25,15 @@ import DistributionChart from './DistributionChart';
 import { Sparkles, Zap, Shield, Flame, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-import { calculateUserXP, calculateHabitStreak, calculateWeeklyProgress, calculateConsistency } from '../lib/habitEngine';
+import { 
+  calculateUserXP, 
+  calculateHabitStreak, 
+  calculateWeeklyProgress, 
+  calculateWeeklyConsistency, 
+  calculateDailyConsistency,
+  getWeeklyStats,
+  XP_MAP 
+} from '../lib/habitEngine';
 
 interface WeeklyDashboardProps {
   profile: UserProfile;
@@ -34,7 +42,7 @@ interface WeeklyDashboardProps {
 
 export default function WeeklyDashboard({ profile, today }: WeeklyDashboardProps) {
   const [habits, setHabits] = useState<Habit[]>([]);
-  const [allCompletions, setAllCompletions] = useState<DayCompletion[]>([]);
+  const [focusSessions, setFocusSessions] = useState<FocusSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [xpPopups, setXpPopups] = useState<{ id: number; amount: number; x: number; y: number }[]>([]);
   
@@ -47,30 +55,27 @@ export default function WeeklyDashboard({ profile, today }: WeeklyDashboardProps
     const unsubscribeHabits = onSnapshot(collection(db, habitsPath), (snap) => {
       const h = snap.docs.map(d => ({ ...d.data(), id: d.id } as Habit));
       setHabits(h);
+      if (loading) setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, habitsPath);
     });
 
-    // 2. Listen to ALL completions for the user
-    const completionsPath = `groups/${profile.groupId}/users/${profile.uid}/completions`;
-    
-    const unsubscribeCompletions = onSnapshot(collection(db, completionsPath), (snap) => {
-      const c = snap.docs.map(d => ({ ...d.data(), id: d.id } as DayCompletion));
-      setAllCompletions(c);
-      setLoading(false);
+    // 2. Listen to focus sessions
+    const focusPath = `groups/${profile.groupId}/users/${profile.uid}/focusSessions`;
+    const unsubscribeFocus = onSnapshot(collection(db, focusPath), (snap) => {
+      setFocusSessions(snap.docs.map(d => ({ ...d.data(), id: d.id } as FocusSession)));
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, completionsPath);
+      handleFirestoreError(error, OperationType.GET, focusPath);
     });
 
     return () => {
       unsubscribeHabits();
-      unsubscribeCompletions();
+      unsubscribeFocus();
     };
-  }, [profile.uid, profile.groupId, today]);
+  }, [profile.uid, profile.groupId]);
 
   const handleAddHabit = async (name: string, difficulty: HabitDifficulty, type: HabitType, target: number) => {
     const habitsPath = `groups/${profile.groupId}/users/${profile.uid}/habits`;
-    const xpValues = { easy: 10, medium: 25, hard: 50 };
     
     try {
       await addDoc(collection(db, habitsPath), {
@@ -78,9 +83,8 @@ export default function WeeklyDashboard({ profile, today }: WeeklyDashboardProps
         difficulty,
         type,
         target,
-        xpValue: xpValues[difficulty],
-        currentStreak: 0,
-        bestStreak: 0,
+        xpValue: XP_MAP[difficulty],
+        completions: {},
         createdAt: Date.now()
       });
     } catch (e) {
@@ -122,60 +126,30 @@ export default function WeeklyDashboard({ profile, today }: WeeklyDashboardProps
 
     const habitPath = `groups/${profile.groupId}/users/${profile.uid}/habits/${habitId}`;
     const habitRef = doc(db, habitPath);
-    const completionPath = `groups/${profile.groupId}/users/${profile.uid}/completions/${dateStr}`;
-    const completionRef = doc(db, completionPath);
-    const userRef = doc(db, 'users', profile.uid);
-    const nestedUserRef = doc(db, 'groups', profile.groupId, 'users', profile.uid);
 
     try {
       await runTransaction(db, async (transaction) => {
         const habitSnap = await transaction.get(habitRef);
-        const userSnap = await transaction.get(userRef);
-        const completionSnap = await transaction.get(completionRef);
-
-        if (!habitSnap.exists() || !userSnap.exists()) return;
+        if (!habitSnap.exists()) return;
 
         const habitData = habitSnap.data() as Habit;
-        const userData = userSnap.data() as UserProfile;
-
-        const completionData = completionSnap.exists() 
-          ? (completionSnap.data() as DayCompletion) 
-          : { date: dateStr, completions: {}, xpEarned: 0 };
-
-        const isAdding = !completionData.completions[habitId];
-        const newCompletions = { ...completionData.completions, [habitId]: isAdding };
+        const currentCompletions = habitData.completions || {};
+        const isAdding = !currentCompletions[dateStr];
         
-        if (!isAdding) delete newCompletions[habitId];
+        const newCompletions = { ...currentCompletions };
+        if (isAdding) {
+          newCompletions[dateStr] = true;
+        } else {
+          delete newCompletions[dateStr];
+        }
 
-        // XP Update
-        const xpDelta = isAdding ? habitData.xpValue : -habitData.xpValue;
-        const newTotalXp = Math.max(0, (userData.xp || 0) + xpDelta);
-        const newLevel = Math.floor(Math.sqrt(newTotalXp / 100));
+        transaction.update(habitRef, { completions: newCompletions });
 
-        transaction.set(completionRef, {
-          ...completionData,
-          completions: newCompletions,
-          xpEarned: (completionData.xpEarned || 0) + xpDelta
-        });
-
-        const userUpdates = {
-          xp: newTotalXp,
-          level: newLevel,
-          totalCompletions: Math.max(0, (userData.totalCompletions || 0) + (isAdding ? 1 : -1)),
-          lastActive: Date.now()
-        };
-
-        transaction.update(userRef, userUpdates);
-        transaction.update(nestedUserRef, userUpdates);
-
-        // We no longer update streaks in the habit document via transaction.
-        // They are derived in real-time by the dashboard components.
-        
         if (isAdding) {
           const rect = (e?.target as HTMLElement)?.getBoundingClientRect();
           const popup = {
             id: Date.now(),
-            amount: habitData.xpValue,
+            amount: XP_MAP[habitData.difficulty] || 10,
             x: rect ? rect.left : window.innerWidth / 2,
             y: rect ? rect.top : window.innerHeight / 2
           };
@@ -191,49 +165,18 @@ export default function WeeklyDashboard({ profile, today }: WeeklyDashboardProps
   };
 
   // Derived Stats Calculation
-  const weekCompletions = allCompletions.filter(c => currentWeekDays.map(d => format(d, 'yyyy-MM-dd')).includes(c.date));
-  const weekCompletionsRecord: Record<string, DayCompletion> = {};
-  weekCompletions.forEach(c => { weekCompletionsRecord[c.date] = c; });
-
-  const totalPossibleHabitCompletions = habits.length * 7;
-  let completedHabitCount = 0;
-  
-  weekCompletions.forEach((day: DayCompletion) => {
-    if (day.completions) {
-      habits.forEach(h => {
-        if (day.completions[h.id]) {
-          completedHabitCount++;
-        }
-      });
-    }
-  });
-
-  const weeklyConsistency = totalPossibleHabitCompletions > 0 ? completedHabitCount / totalPossibleHabitCompletions : 0;
-  const missedHabitCount = Math.max(0, totalPossibleHabitCompletions - completedHabitCount);
+  const weeklyConsistency = calculateWeeklyConsistency(habits, currentWeekDays);
+  const { totalCompleted, totalMissed } = getWeeklyStats(habits, currentWeekDays);
 
   const performanceChartData = [
-    { name: 'Completed', value: completedHabitCount, color: '#3B82F6' },
-    { name: 'Missed', value: missedHabitCount, color: 'rgba(255,255,255,0.05)' }
-  ].filter(d => d.value > 0 || totalPossibleHabitCompletions === 0);
+    { name: 'Completed', value: totalCompleted, color: '#3B82F6' },
+    { name: 'Missed', value: totalMissed, color: 'rgba(255,255,255,0.05)' }
+  ].filter(d => d.value > 0 || (totalCompleted + totalMissed) === 0);
 
-  const chartData = currentWeekDays.map(d => {
-    const ds = format(d, 'yyyy-MM-dd');
-    const dayComp = weekCompletionsRecord[ds];
-    
-    let dayCompletedCount = 0;
-    if (dayComp && dayComp.completions) {
-      habits.forEach(h => {
-        if (dayComp.completions[h.id]) {
-          dayCompletedCount++;
-        }
-      });
-    }
-
-    return {
-      name: format(d, 'EEE'),
-      progress: habits.length > 0 ? Math.round((dayCompletedCount / habits.length) * 100) : 0
-    };
-  });
+  const chartData = currentWeekDays.map(d => ({
+    name: format(d, 'EEE'),
+    progress: calculateDailyConsistency(habits, d)
+  }));
 
   if (loading) return null;
 
@@ -279,7 +222,7 @@ export default function WeeklyDashboard({ profile, today }: WeeklyDashboardProps
             
             <div className="flex sm:flex-col items-center sm:items-end gap-2 sm:gap-1 bg-white/[0.03] sm:bg-transparent px-2.5 py-1.5 sm:p-0 rounded-lg sm:rounded-none border border-white/5 sm:border-none">
               <span className="text-[7px] sm:text-[10px] font-black text-text-dim uppercase tracking-widest leading-none">Consistency</span>
-              <span className="text-base sm:text-2xl font-black text-accent italic leading-none">{Math.round(weeklyConsistency * 100)}%</span>
+              <span className="text-base sm:text-2xl font-black text-accent italic leading-none">{weeklyConsistency}%</span>
             </div>
           </div>
           
@@ -323,7 +266,6 @@ export default function WeeklyDashboard({ profile, today }: WeeklyDashboardProps
         <div className="xl:col-span-4 2xl:col-span-3">
           <HabitRegistry 
             habits={habits}
-            completions={allCompletions}
             today={today}
             onAddHabit={handleAddHabit}
             onUpdateHabit={handleUpdateHabit}
@@ -334,7 +276,6 @@ export default function WeeklyDashboard({ profile, today }: WeeklyDashboardProps
         <div className="xl:col-span-8 2xl:col-span-9">
           <HabitGrid 
             habits={habits}
-            days={weekCompletionsRecord}
             onToggleCell={(id, date) => handleToggleHabit(id, date)}
             today={today}
           />

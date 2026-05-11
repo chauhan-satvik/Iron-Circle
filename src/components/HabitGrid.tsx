@@ -1,18 +1,18 @@
 import React from 'react';
-import { Habit, DayCompletion } from '../types';
+import { Habit } from '../types';
 import { format, isSameDay } from 'date-fns';
 import { cn, getDaysOfWeek } from '../lib/utils';
-import { Check, X } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { motion } from 'motion/react';
+import { calculateHabitStreak } from '../lib/habitEngine';
 
 interface HabitGridProps {
   habits: Habit[];
-  days: Record<string, DayCompletion>;
   onToggleCell: (habitId: string, date: string) => void;
   today: Date;
 }
 
-export default function HabitGrid({ habits, days, onToggleCell, today }: HabitGridProps) {
+export default function HabitGrid({ habits, onToggleCell, today }: HabitGridProps) {
   const currentWeekDays = getDaysOfWeek(today);
 
   return (
@@ -65,19 +65,26 @@ export default function HabitGrid({ habits, days, onToggleCell, today }: HabitGr
                       {habit.name}
                     </span>
                     <div className="flex items-center gap-2">
-                       <div className={cn(
-                         "w-1.5 h-1.5 rounded-full",
-                         habit.difficulty === 'easy' ? 'bg-green-400' : habit.difficulty === 'medium' ? 'bg-orange-400' : 'bg-red-400'
-                       )} />
+                       <motion.div 
+                        animate={habit.difficulty === 'hard' ? {
+                          scale: [1, 1.3, 1],
+                          opacity: [0.6, 1, 0.6]
+                        } : {}}
+                        transition={{ repeat: Infinity, duration: 2 }}
+                        className={cn(
+                          "w-1.5 h-1.5 rounded-full",
+                          habit.difficulty === 'easy' ? 'bg-emerald-400' : habit.difficulty === 'medium' ? 'bg-amber-400' : 'bg-rose-400'
+                        )} 
+                       />
                        <span className="text-[8px] font-black text-text-dim/40 uppercase tracking-tighter">
-                         {habit.difficulty} • {habit.currentStreak}D STREAK
+                         {habit.difficulty} • {calculateHabitStreak(habit, today)}D STREAK
                        </span>
                     </div>
                   </div>
                 </td>
                 {currentWeekDays.map(date => {
                   const dateStr = format(date, 'yyyy-MM-dd');
-                  const isCompleted = days[dateStr]?.completions?.[habit.id];
+                  const isCompleted = !!habit.completions?.[dateStr];
                   const isToday = isSameDay(date, today);
                   const isFuture = date > today && !isToday;
                   const isPast = date < today && !isToday;

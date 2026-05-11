@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
-import { Habit, DayCompletion } from '../types';
+import { Habit } from '../types';
 import { Flame, Star, Zap, TrendingUp, CheckCircle2, MoreVertical, Trash2, Edit2, Calendar, Layers } from 'lucide-react';
 import { cn, getDaysOfWeek } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { calculateHabitStreak, calculateWeeklyProgress } from '../lib/habitEngine';
+import { calculateHabitStreak, calculateWeeklyProgress, XP_MAP } from '../lib/habitEngine';
 
 interface HabitItemProps {
   habit: Habit;
   onToggleToday: (e: React.MouseEvent) => void;
   isCompletedToday: boolean;
-  completions: DayCompletion[];
   today: Date;
   onUpdate: (updates: Partial<Habit>) => void;
   onDelete: () => void;
@@ -20,7 +19,6 @@ export default function HabitItem({
   habit, 
   onToggleToday, 
   isCompletedToday, 
-  completions,
   today,
   onUpdate, 
   onDelete 
@@ -29,8 +27,8 @@ export default function HabitItem({
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  const derivedStreak = calculateHabitStreak(habit.id, completions, today);
-  const weeklyProgress = calculateWeeklyProgress(habit.id, completions, getDaysOfWeek(today));
+  const derivedStreak = calculateHabitStreak(habit, today);
+  const weeklyProgress = calculateWeeklyProgress(habit, getDaysOfWeek(today));
   const [editData, setEditData] = useState({
     name: habit.name,
     difficulty: habit.difficulty,
@@ -38,21 +36,34 @@ export default function HabitItem({
     target: habit.target
   });
 
-  const difficultyColors = {
-    easy: 'text-green-400 bg-green-400/10 border-green-400/20',
-    medium: 'text-orange-400 bg-orange-400/10 border-orange-400/20',
-    hard: 'text-red-400 bg-red-400/10 border-red-400/20'
+  const difficultyStyles = {
+    easy: {
+      colors: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
+      glow: '',
+      label: 'EASY'
+    },
+    medium: {
+      colors: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
+      glow: '',
+      label: 'MEDIUM'
+    },
+    hard: {
+      colors: 'text-rose-400 bg-rose-400/10 border-rose-400/20',
+      glow: 'shadow-[0_0_15px_rgba(244,63,94,0.3)]',
+      label: 'HARD'
+    }
   };
+
+  const currentDiff = difficultyStyles[habit.difficulty];
 
   const handleSave = () => {
     if (editData.name.trim()) {
-      const xpValues = { easy: 10, medium: 25, hard: 50 };
       onUpdate({ 
         name: editData.name,
         difficulty: editData.difficulty,
         type: editData.type,
         target: editData.target,
-        xpValue: xpValues[editData.difficulty]
+        xpValue: XP_MAP[editData.difficulty]
       });
     }
     setShowEditModal(false);
@@ -90,12 +101,22 @@ export default function HabitItem({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 overflow-x-auto no-scrollbar">
-            <span className={cn(
-              "text-[7px] font-black uppercase tracking-[0.2em] px-1.5 py-0.5 rounded border whitespace-nowrap",
-              difficultyColors[habit.difficulty]
-            )}>
-              {habit.difficulty}
-            </span>
+            <motion.span 
+              animate={habit.difficulty === 'hard' ? {
+                boxShadow: [
+                  '0 0 0px rgba(244,63,94,0)',
+                  '0 0 12px rgba(244,63,94,0.4)',
+                  '0 0 0px rgba(244,63,94,0)'
+                ]
+              } : {}}
+              transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+              className={cn(
+                "text-[7px] font-black uppercase tracking-[0.2em] px-1.5 py-0.5 rounded border whitespace-nowrap",
+                currentDiff.colors
+              )}
+            >
+              {currentDiff.label}
+            </motion.span>
             <div className={cn(
               "flex items-center gap-1.5 px-1.5 py-0.5 rounded-md border text-[7px] font-black uppercase tracking-widest whitespace-nowrap",
               habit.type === 'daily' ? "bg-blue-400/10 border-blue-400/20 text-blue-400" : "bg-purple-400/10 border-purple-400/20 text-purple-400"
@@ -105,7 +126,7 @@ export default function HabitItem({
             </div>
             <div className="flex items-center gap-1 text-accent/60 ml-auto">
               <Zap className="w-3 h-3 fill-current" />
-              <span className="text-[9px] font-black whitespace-nowrap">{habit.xpValue} XP</span>
+              <span className="text-[9px] font-black whitespace-nowrap">{XP_MAP[habit.difficulty]} XP</span>
             </div>
           </div>
           <h3 className={cn(

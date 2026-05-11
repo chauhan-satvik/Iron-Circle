@@ -24,13 +24,15 @@ import {
 import { cn } from '../lib/utils';
 
 const PREDEFINED_AVATARS = [
-  '⚡', '🛡️', '🧠', '⚔️', '🔮', '🧬', '🌌', '🌋', '🌊', '🌪️', '🦾', '👾', '🚀', '🔭', '📡', '💎', '🔥', '☄️'
+  '⚡', '🛡️', '🧠', '⚔️', '🔮', '🧬', '🌌', '🌋', '🌊', '🌪️', '🦾', '👾', '🚀', '🔭', '📡', '💎', '🔥', '☄️',
+  '🦁', '🦅', '🐺', '🐍', '🐉', '🐙', '🦖', '🦄', '🎭', '🎨', '🎬', '🎹', '🎮', '🕹️', '💻', '🔋', '🔌', '📡'
 ];
+
+const MOODS = ['🔥', '🧘', '🚀', '🛠️', '💤', '📈', '📉', '🌪️', '🛡️', '🎯', '🧪', '👾'];
 
 interface ProfilePanelProps {
   profile: UserProfile;
   habits: Habit[];
-  completions: DayCompletion[];
   focusSessions: FocusSession[];
   derivedXp: number;
   derivedLevel: number;
@@ -45,7 +47,6 @@ interface ProfilePanelProps {
 export default function ProfilePanel({ 
   profile, 
   habits,
-  completions,
   focusSessions,
   derivedXp,
   derivedLevel,
@@ -60,9 +61,8 @@ export default function ProfilePanel({
   const [tempName, setTempName] = useState(profile.displayName);
   const [tempUsername, setTempUsername] = useState(profile.username);
   const [tempBio, setTempBio] = useState(profile.bio || '');
-  const [tempTwitter, setTempTwitter] = useState(profile.socialLinks?.twitter || '');
-  const [tempGithub, setTempGithub] = useState(profile.socialLinks?.github || '');
-  const [tempWebsite, setTempWebsite] = useState(profile.socialLinks?.website || '');
+  const [tempStatus, setTempStatus] = useState(profile.status || '');
+  const [tempMood, setTempMood] = useState(profile.mood || '');
   const [tempAvatarType, setTempAvatarType] = useState<UserProfile['avatar']['type']>(profile.avatar?.type || 'initials');
   const [tempAvatarValue, setTempAvatarValue] = useState(profile.avatar?.value || '');
   const [selectedColor, setSelectedColor] = useState(profile.avatar?.color || '#3B82F6');
@@ -86,11 +86,8 @@ export default function ProfilePanel({
         displayName: tempName,
         username: tempUsername.toLowerCase().replace(/[^a-z0-9_]/g, ''),
         bio: tempBio,
-        socialLinks: {
-          twitter: tempTwitter,
-          github: tempGithub,
-          website: tempWebsite
-        },
+        status: tempStatus,
+        mood: tempMood,
         avatar: {
           type: tempAvatarType,
           color: selectedColor,
@@ -150,38 +147,28 @@ export default function ProfilePanel({
             <div className="p-6 sm:p-8 space-y-8 sm:space-y-10">
               {/* Identity Section */}
               <div className="text-center space-y-4">
-                <Avatar 
-                  avatar={profile.avatar}
-                  name={profile.displayName}
-                  size="xl"
-                  className="mx-auto"
-                />
+                <div className="relative inline-block mx-auto">
+                  <Avatar 
+                    avatar={profile.avatar}
+                    name={profile.displayName}
+                    mood={profile.mood}
+                    size="xl"
+                  />
+                </div>
                 <div>
                   <h3 className="text-2xl font-black text-white italic uppercase tracking-tighter">{profile.displayName}</h3>
                   <p className="text-accent font-black text-sm tracking-widest mt-1">@{profile.username}</p>
                 </div>
                 
+                {profile.status && (
+                  <div className="px-4 py-2 bg-white/5 border border-white/5 rounded-2xl inline-block max-w-[80%] mx-auto">
+                    <p className="text-xs font-bold text-accent uppercase tracking-widest leading-tight">{profile.status}</p>
+                  </div>
+                )}
+
                 {profile.bio && (
                   <p className="text-sm text-text-dim max-w-xs mx-auto leading-relaxed">{profile.bio}</p>
                 )}
-
-                <div className="flex items-center justify-center gap-4">
-                  {profile.socialLinks?.twitter && (
-                    <a href={`https://twitter.com/${profile.socialLinks.twitter}`} target="_blank" rel="noopener noreferrer" className="p-2 bg-white/5 rounded-xl text-text-dim hover:text-[#1DA1F2] hover:bg-white/10 transition-all">
-                      <Twitter className="w-4 h-4" />
-                    </a>
-                  )}
-                  {profile.socialLinks?.github && (
-                    <a href={`https://github.com/${profile.socialLinks.github}`} target="_blank" rel="noopener noreferrer" className="p-2 bg-white/5 rounded-xl text-text-dim hover:text-white hover:bg-white/10 transition-all">
-                      <Github className="w-4 h-4" />
-                    </a>
-                  )}
-                  {profile.socialLinks?.website && (
-                    <a href={profile.socialLinks.website.startsWith('http') ? profile.socialLinks.website : `https://${profile.socialLinks.website}`} target="_blank" rel="noopener noreferrer" className="p-2 bg-white/5 rounded-xl text-text-dim hover:text-accent hover:bg-white/10 transition-all">
-                      <Globe className="w-4 h-4" />
-                    </a>
-                  )}
-                </div>
               </div>
 
               {/* Stats Grid */}
@@ -258,65 +245,87 @@ export default function ProfilePanel({
                           className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-4 text-white font-bold focus:outline-none focus:border-accent resize-none text-sm"
                         />
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-2">Twitter</label>
-                          <input 
-                            type="text"
-                            value={tempTwitter}
-                            onChange={(e) => setTempTwitter(e.target.value)}
-                            placeholder="username"
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-accent"
-                          />
+                          <label className="text-[10px] font-black text-white/40 uppercase tracking-widest ml-2">Mood Indicator</label>
+                          <div className="flex flex-wrap gap-2 p-3 bg-white/[0.03] border border-white/10 rounded-2xl">
+                            {MOODS.map(mood => (
+                              <button 
+                                key={mood}
+                                onClick={() => setTempMood(mood === tempMood ? '' : mood)}
+                                className={cn(
+                                  "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
+                                  tempMood === mood ? "bg-accent text-white scale-110" : "bg-white/5 hover:bg-white/10"
+                                )}
+                              >
+                                {mood}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                         <div className="space-y-2">
-                          <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-2">GitHub</label>
+                          <label className="text-[10px] font-black text-white/40 uppercase tracking-widest ml-2">Current Status</label>
                           <input 
                             type="text"
-                            value={tempGithub}
-                            onChange={(e) => setTempGithub(e.target.value)}
-                            placeholder="username"
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-accent"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-2">Web</label>
-                          <input 
-                            type="text"
-                            value={tempWebsite}
-                            onChange={(e) => setTempWebsite(e.target.value)}
-                            placeholder="url"
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-accent"
+                            value={tempStatus}
+                            onChange={(e) => setTempStatus(e.target.value.slice(0, 40))}
+                            placeholder="Operational..."
+                            className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-4 text-white font-bold focus:outline-none focus:border-accent text-sm"
                           />
                         </div>
                       </div>
+
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-white/40 uppercase tracking-widest ml-2">Avatar Manifestation</label>
-                        <div className="grid grid-cols-6 gap-2">
-                          <button 
-                            onClick={() => setTempAvatarType('initials')}
-                            className={cn(
-                              "aspect-square rounded-xl flex items-center justify-center text-xs font-black transition-all",
-                              tempAvatarType === 'initials' ? "bg-accent text-white scale-110 shadow-lg" : "bg-white/5 text-text-dim hover:bg-white/10"
-                            )}
-                          >
-                            TX
-                          </button>
-                          {PREDEFINED_AVATARS.map(avatar => (
+                        <div className="space-y-4">
+                          <div className="flex gap-2">
                             <button 
-                              key={avatar}
-                              onClick={() => {
-                                setTempAvatarType('selection');
-                                setTempAvatarValue(avatar);
-                              }}
+                              onClick={() => setTempAvatarType('initials')}
                               className={cn(
-                                "aspect-square rounded-xl flex items-center justify-center text-lg transition-all",
-                                tempAvatarType === 'selection' && tempAvatarValue === avatar ? "bg-accent text-white scale-110 shadow-lg" : "bg-white/5 text-text-dim hover:bg-white/10"
+                                "flex-1 py-3 rounded-xl flex items-center justify-center text-[10px] font-black uppercase tracking-widest border transition-all",
+                                tempAvatarType === 'initials' ? "bg-accent border-accent text-white" : "bg-white/5 border-white/5 text-text-dim hover:bg-white/10"
                               )}
                             >
-                              {avatar}
+                              Initials
                             </button>
-                          ))}
+                            <button 
+                              onClick={() => setTempAvatarType('image')}
+                              className={cn(
+                                "flex-1 py-3 rounded-xl flex items-center justify-center text-[10px] font-black uppercase tracking-widest border transition-all",
+                                tempAvatarType === 'image' ? "bg-accent border-accent text-white" : "bg-white/5 border-white/5 text-text-dim hover:bg-white/10"
+                              )}
+                            >
+                              Image URL
+                            </button>
+                          </div>
+                          
+                          {tempAvatarType === 'image' && (
+                            <input 
+                              type="url"
+                              value={tempAvatarValue}
+                              onChange={(e) => setTempAvatarValue(e.target.value)}
+                              placeholder="https://images.example.com/profile.jpg"
+                              className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-4 text-white font-bold focus:outline-none focus:border-accent text-xs"
+                            />
+                          )}
+
+                          <div className="grid grid-cols-6 gap-2 max-h-40 overflow-y-auto pr-2 no-scrollbar p-1">
+                            {PREDEFINED_AVATARS.map(avatar => (
+                              <button 
+                                key={avatar}
+                                onClick={() => {
+                                  setTempAvatarType('selection');
+                                  setTempAvatarValue(avatar);
+                                }}
+                                className={cn(
+                                  "aspect-square rounded-xl flex items-center justify-center text-lg transition-all",
+                                  tempAvatarType === 'selection' && tempAvatarValue === avatar ? "bg-accent text-white scale-110 shadow-lg" : "bg-white/5 text-text-dim hover:bg-white/10"
+                                )}
+                              >
+                                {avatar}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
                       <div className="space-y-2">

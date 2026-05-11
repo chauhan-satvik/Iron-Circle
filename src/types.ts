@@ -8,10 +8,8 @@ export interface Habit {
   type: HabitType;
   target: number; // For weekly, target days per week
   xpValue: number;
-  currentStreak: number;
-  bestStreak: number;
   createdAt: number;
-  lastCompletedDate?: string;
+  completions: Record<string, boolean>; // key is YYYY-MM-DD
 }
 
 export interface DayCompletion {
@@ -32,15 +30,8 @@ export interface UserProfile {
     color: string;
   };
   bio?: string;
-  socialLinks?: {
-    twitter?: string;
-    github?: string;
-    website?: string;
-  };
-  xp: number;
-  level: number;
-  globalStreak: number;
-  totalCompletions: number;
+  status?: string;
+  mood?: string;
   lastActive: number;
   groupId: string;
   defaultFocusDuration?: number;
