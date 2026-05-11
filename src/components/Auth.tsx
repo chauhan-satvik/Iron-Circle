@@ -31,6 +31,8 @@ import FocusTimer from './FocusTimer';
 import Avatar from './Avatar';
 import ProfilePanel from './ProfilePanel';
 import HelpTour from './HelpTour';
+import AdminLogin from './admin/AdminLogin';
+import AdminPanel from './admin/AdminPanel';
 import { calculateUserXP, calculateGlobalStreak } from '../lib/habitEngine';
 import { LogIn, LogOut, Shield, Trash2, X, AlertTriangle, User as UserIcon, Hash, Palette, Flame, LayoutDashboard, Timer, Clock, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -98,6 +100,21 @@ export default function AuthWrapper() {
       });
     }, 60000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const checkAdminSession = () => {
+      const isAdmin = localStorage.getItem('iron_admin') === 'true';
+      const expiry = localStorage.getItem('iron_admin_expiry');
+      if (isAdmin && expiry && Date.now() > parseInt(expiry)) {
+        localStorage.removeItem('iron_admin');
+        localStorage.removeItem('iron_admin_expiry');
+        // If we are on an admin route, the component themselves handle the redirect
+      }
+    };
+    checkAdminSession();
+    const interval = setInterval(checkAdminSession, 60000); // Check every minute
+    return () => clearInterval(interval);
   }, []);
 
   const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4'];
@@ -362,210 +379,216 @@ export default function AuthWrapper() {
   return (
     <Router>
       <div className="min-h-screen bg-bg-main text-[#F1F5F9] font-sans selection:bg-accent/30 overflow-x-hidden">
-      <AnimatePresence mode="wait">
-        {!user ? (
-          <motion.div 
-            key="login"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="relative flex flex-col items-center justify-center min-h-screen p-6 text-center overflow-hidden"
-          >
-            {/* Background elements */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-accent/5 blur-[120px] rounded-full -mt-48" />
-            <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent/5 blur-[100px] rounded-full" />
-            
-            <motion.div 
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.8, ease: [0.23, 1, 0.32, 1] }}
-              className="relative z-10 w-24 h-24 bg-accent/10 rounded-[2rem] flex items-center justify-center mb-10 border border-accent/20 shadow-[0_0_50px_rgba(59,130,246,0.1)]"
-            >
-              <Shield className="w-12 h-12 text-accent drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
-            </motion.div>
-
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className="relative z-10"
-            >
-              <h1 className="text-7xl font-black tracking-tighter text-white mb-6 uppercase italic">
-                Iron Circle<span className="text-accent underline underline-offset-8">.</span>
-              </h1>
-              <p className="text-text-dim max-w-lg mx-auto mb-12 text-lg font-medium leading-relaxed opacity-80">
-                A high-fidelity social accountability system. Forge habits, compete in circles, and ascend through consistent daily output.
-              </p>
-              
-              {authError && (
-                <div className="mb-8 px-6 py-3 bg-red-400/10 border border-red-400/20 rounded-2xl">
-                  <p className="text-red-400 text-xs font-bold uppercase tracking-wider">{authError}</p>
-                </div>
-              )}
-
-              <button 
-                onClick={login}
-                disabled={isSigningIn}
-                className="group relative flex items-center gap-4 px-10 py-5 bg-accent hover:opacity-90 disabled:opacity-50 text-white font-black rounded-2xl transition-all hover:scale-[1.02] active:scale-95 shadow-[0_20px_40px_rgba(59,130,246,0.3)]"
-              >
-                <LogIn className="w-5 h-5 transition-transform group-hover:translate-x-1" />
-                <span className="uppercase tracking-[0.1em]">{isSigningIn ? 'Securing Connection...' : 'Initialize Session'}</span>
-              </button>
-
-              <p className="mt-12 text-[10px] font-black text-white/10 uppercase tracking-[0.5em]">
-                Protocol Alpha-2 • v2.0 Ready
-              </p>
-            </motion.div>
-          </motion.div>
-        ) : (
-          <motion.div 
-            key="app"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="w-full"
-          >
-            <header className="max-w-screen-2xl mx-auto px-4 sm:px-8 h-20 sm:h-24 flex items-center justify-between sticky top-0 bg-bg-main/60 backdrop-blur-2xl z-50 border-b border-white/[0.03]">
-              <div 
-                className="flex items-center gap-3 sm:gap-6 cursor-pointer group"
-                onClick={() => setIsProfileOpen(true)}
-              >
-                <div className="relative">
-                  <Avatar 
-                    avatar={profile?.avatar} 
-                    name={profile?.displayName} 
-                    size="md" 
-                    mood={profile?.mood}
-                    className="ring-2 ring-white/5 group-hover:ring-accent/40 transition-all"
-                  />
-                  <div className="absolute -bottom-1 -right-1 bg-accent p-1 rounded-full shadow-lg sm:hidden">
-                    <Hash className="w-2 h-2 text-white" />
-                  </div>
-                </div>
-                
-                <div className="hidden xs:block min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5 sm:mb-1 overflow-hidden">
-                    <span className="text-[10px] font-black text-text-dim/40 uppercase tracking-widest truncate">{profile?.username || 'GUEST'}</span>
-                    <div className="w-1 h-1 rounded-full bg-accent/40 animate-pulse shrink-0" />
-                  </div>
-                  <h3 className="text-sm sm:text-lg font-black text-white italic tracking-tighter uppercase group-hover:text-accent transition-colors truncate">
-                    {profile?.displayName || profile?.name || 'Anon'}
-                  </h3>
-                </div>
-              </div>
-
-                <div className="flex items-center gap-2 sm:gap-6">
-                  <button 
-                    onClick={() => setIsHelpOpen(true)}
-                    className="p-2 sm:p-3 bg-white/[0.02] hover:bg-white/10 text-text-dim hover:text-white border border-white/5 rounded-xl sm:rounded-2xl transition-all duration-300 active:scale-90"
-                    title="System Protocol Help"
+        <Routes>
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin" element={<AdminPanel />} />
+          <Route path="*" element={
+            <AnimatePresence mode="wait">
+              {!user ? (
+                <motion.div 
+                  key="login"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="relative flex flex-col items-center justify-center min-h-screen p-6 text-center overflow-hidden"
+                >
+                  {/* Background elements */}
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-accent/5 blur-[120px] rounded-full -mt-48" />
+                  <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent/5 blur-[100px] rounded-full" />
+                  
+                  <motion.div 
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.8, ease: [0.23, 1, 0.32, 1] }}
+                    className="relative z-10 w-24 h-24 bg-accent/10 rounded-[2rem] flex items-center justify-center mb-10 border border-accent/20 shadow-[0_0_50px_rgba(59,130,246,0.1)]"
                   >
-                    <Info className="w-4 sm:w-5 h-4 sm:h-5" />
-                  </button>
+                    <Shield className="w-12 h-12 text-accent drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+                  </motion.div>
 
-                <div className="hidden lg:flex flex-col items-end gap-2">
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-black text-text-dim/60 uppercase tracking-wider tabular-nums">
-                      {derivedXp.toLocaleString()} XP
-                    </span>
-                    <div className="w-32 h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${derivedXp % 100}%` }}
-                        className="h-full bg-accent shadow-[0_0_10px_rgba(59,130,246,0.6)]"
-                      />
-                    </div>
-                  </div>
-                </div>
+                  <motion.div
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="relative z-10"
+                  >
+                    <h1 className="text-7xl font-black tracking-tighter text-white mb-6 uppercase italic">
+                      Iron Circle<span className="text-accent underline underline-offset-8">.</span>
+                    </h1>
+                    <p className="text-text-dim max-w-lg mx-auto mb-12 text-lg font-medium leading-relaxed opacity-80">
+                      A high-fidelity social accountability system. Forge habits, compete in circles, and ascend through consistent daily output.
+                    </p>
+                    
+                    {authError && (
+                      <div className="mb-8 px-6 py-3 bg-red-400/10 border border-red-400/20 rounded-2xl">
+                        <p className="text-red-400 text-xs font-bold uppercase tracking-wider">{authError}</p>
+                      </div>
+                    )}
 
-                <div className="flex items-center gap-2 sm:gap-3">
-                  {derivedGlobalStreak > 0 && (
-                    <motion.div 
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 sm:py-1.5 bg-orange-500/10 border border-orange-500/20 rounded-lg sm:rounded-xl shrink-0"
+                    <button 
+                      onClick={login}
+                      disabled={isSigningIn}
+                      className="group relative flex items-center gap-4 px-10 py-5 bg-accent hover:opacity-90 disabled:opacity-50 text-white font-black rounded-2xl transition-all hover:scale-[1.02] active:scale-95 shadow-[0_20px_40px_rgba(59,130,246,0.3)]"
                     >
-                      <Flame className="w-3 sm:w-4 h-3 sm:h-4 text-orange-500 fill-current animate-pulse" />
-                      <span className="text-[9px] sm:text-xs font-black text-orange-500 italic uppercase">{derivedGlobalStreak}</span>
-                    </motion.div>
-                  )}
-                  <div className="w-px h-6 sm:h-8 bg-white/5 mx-0.5 sm:mx-1 hidden sm:block" />
-                  <button 
-                    onClick={() => setShowDeleteModal(true)}
-                    className="hidden sm:flex p-2 sm:p-3 bg-white/[0.02] hover:bg-red-500/10 text-text-dim hover:text-red-400 border border-white/5 hover:border-red-500/20 rounded-xl sm:rounded-2xl transition-all duration-300 active:scale-90"
-                    title="Account Settings"
-                  >
-                    <Trash2 className="w-4 sm:w-5 h-4 sm:h-5" />
-                  </button>
-                  <button 
-                    onClick={logout}
-                    className="hidden xs:flex p-2 sm:p-3 bg-white/[0.02] hover:bg-red-500/10 text-text-dim hover:text-red-400 border border-white/5 hover:border-red-500/20 rounded-xl sm:rounded-2xl transition-all duration-300 active:scale-90"
-                    title="Terminate Session"
-                  >
-                    <LogOut className="w-4 sm:w-5 h-4 sm:h-5" />
-                  </button>
-                </div>
-              </div>
-            </header>
+                      <LogIn className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+                      <span className="uppercase tracking-[0.1em]">{isSigningIn ? 'Securing Connection...' : 'Initialize Session'}</span>
+                    </button>
 
-            <main className="max-w-screen-2xl mx-auto p-4 sm:p-8 text-[#F1F5F9]">
-              {(profile && profile.displayName && profile.displayName !== 'Anon') ? (
-                <>
-                  <Routes>
-                    <Route path="/" element={<WeeklyDashboard profile={profile} today={today} />} />
-                    <Route path="/focus" element={<FocusTimer profile={profile} today={today} />} />
-                  </Routes>
-                  <Navigation />
-                  <ProfilePanel 
-                    profile={profile} 
-                    habits={habits}
-                    focusSessions={focusSessions}
-                    derivedXp={derivedXp}
-                    derivedLevel={derivedLevel}
-                    globalStreak={derivedGlobalStreak}
-                    today={today}
-                    isOpen={isProfileOpen} 
-                    onClose={() => setIsProfileOpen(false)} 
-                    onLogout={logout}
-                    onDeleteRequested={() => {
-                      setIsProfileOpen(false);
-                      setShowDeleteModal(true);
-                    }}
-                  />
-                </>
+                    <p className="mt-12 text-[10px] font-black text-white/10 uppercase tracking-[0.5em]">
+                      Protocol Alpha-2 • v2.0 Ready
+                    </p>
+                  </motion.div>
+                </motion.div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-20 animate-pulse opacity-50">
-                   <div className="text-[10px] tracking-[0.4em] font-black uppercase">Establishing Neural Link...</div>
-                </div>
+                <motion.div 
+                  key="app"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="w-full"
+                >
+                  <header className="max-w-screen-2xl mx-auto px-4 sm:px-8 h-20 sm:h-24 flex items-center justify-between sticky top-0 bg-bg-main/60 backdrop-blur-2xl z-50 border-b border-white/[0.03]">
+                    <div 
+                      className="flex items-center gap-3 sm:gap-6 cursor-pointer group"
+                      onClick={() => setIsProfileOpen(true)}
+                    >
+                      <div className="relative">
+                        <Avatar 
+                          avatar={profile?.avatar} 
+                          name={profile?.displayName} 
+                          size="md" 
+                          mood={profile?.mood}
+                          className="ring-2 ring-white/5 group-hover:ring-accent/40 transition-all"
+                        />
+                        <div className="absolute -bottom-1 -right-1 bg-accent p-1 rounded-full shadow-lg sm:hidden">
+                          <Hash className="w-2 h-2 text-white" />
+                        </div>
+                      </div>
+                      
+                      <div className="hidden xs:block min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5 sm:mb-1 overflow-hidden">
+                          <span className="text-[10px] font-black text-text-dim/40 uppercase tracking-widest truncate">{profile?.username || 'GUEST'}</span>
+                          <div className="w-1 h-1 rounded-full bg-accent/40 animate-pulse shrink-0" />
+                        </div>
+                        <h3 className="text-sm sm:text-lg font-black text-white italic tracking-tighter uppercase group-hover:text-accent transition-colors truncate">
+                          {profile?.displayName || profile?.name || 'Anon'}
+                        </h3>
+                      </div>
+                    </div>
+
+                      <div className="flex items-center gap-2 sm:gap-6">
+                        <button 
+                          onClick={() => setIsHelpOpen(true)}
+                          className="p-2 sm:p-3 bg-white/[0.02] hover:bg-white/10 text-text-dim hover:text-white border border-white/5 rounded-xl sm:rounded-2xl transition-all duration-300 active:scale-90"
+                          title="System Protocol Help"
+                        >
+                          <Info className="w-4 sm:w-5 h-4 sm:h-5" />
+                        </button>
+
+                      <div className="hidden lg:flex flex-col items-end gap-2">
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-black text-text-dim/60 uppercase tracking-wider tabular-nums">
+                            {derivedXp.toLocaleString()} XP
+                          </span>
+                          <div className="w-32 h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${derivedXp % 100}%` }}
+                              className="h-full bg-accent shadow-[0_0_10px_rgba(59,130,246,0.6)]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        {derivedGlobalStreak > 0 && (
+                          <motion.div 
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            className="flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 sm:py-1.5 bg-orange-500/10 border border-orange-500/20 rounded-lg sm:rounded-xl shrink-0"
+                          >
+                            <Flame className="w-3 sm:w-4 h-3 sm:h-4 text-orange-500 fill-current animate-pulse" />
+                            <span className="text-[9px] sm:text-xs font-black text-orange-500 italic uppercase">{derivedGlobalStreak}</span>
+                          </motion.div>
+                        )}
+                        <div className="w-px h-6 sm:h-8 bg-white/5 mx-0.5 sm:mx-1 hidden sm:block" />
+                        <button 
+                          onClick={() => setShowDeleteModal(true)}
+                          className="hidden sm:flex p-2 sm:p-3 bg-white/[0.02] hover:bg-red-500/10 text-text-dim hover:text-red-400 border border-white/5 hover:border-red-500/20 rounded-xl sm:rounded-2xl transition-all duration-300 active:scale-90"
+                          title="Account Settings"
+                        >
+                          <Trash2 className="w-4 sm:w-5 h-4 sm:h-5" />
+                        </button>
+                        <button 
+                          onClick={logout}
+                          className="hidden xs:flex p-2 sm:p-3 bg-white/[0.02] hover:bg-red-500/10 text-text-dim hover:text-red-400 border border-white/5 hover:border-red-500/20 rounded-xl sm:rounded-2xl transition-all duration-300 active:scale-90"
+                          title="Terminate Session"
+                        >
+                          <LogOut className="w-4 sm:w-5 h-4 sm:h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  </header>
+
+                  <main className="max-w-screen-2xl mx-auto p-4 sm:p-8 text-[#F1F5F9]">
+                    {(profile && profile.displayName && profile.displayName !== 'Anon') ? (
+                      <>
+                        <Routes>
+                          <Route path="/" element={<WeeklyDashboard profile={profile} today={today} />} />
+                          <Route path="/focus" element={<FocusTimer profile={profile} today={today} />} />
+                        </Routes>
+                        <Navigation />
+                        <ProfilePanel 
+                          profile={profile} 
+                          habits={habits}
+                          focusSessions={focusSessions}
+                          derivedXp={derivedXp}
+                          derivedLevel={derivedLevel}
+                          globalStreak={derivedGlobalStreak}
+                          today={today}
+                          isOpen={isProfileOpen} 
+                          onClose={() => setIsProfileOpen(false)} 
+                          onLogout={logout}
+                          onDeleteRequested={() => {
+                            setIsProfileOpen(false);
+                            setShowDeleteModal(true);
+                          }}
+                        />
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-20 animate-pulse opacity-50">
+                        <div className="text-[10px] tracking-[0.4em] font-black uppercase">Establishing Neural Link...</div>
+                      </div>
+                    )}
+                  </main>
+
+                  <footer className="max-w-screen-2xl mx-auto px-8 py-12 pb-32 border-t border-white/[0.03] opacity-40">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center">
+                          <Shield className="w-4 h-4 text-accent" />
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-widest text-white">Iron Circle</div>
+                          <div className="text-[8px] font-medium text-text-dim uppercase tracking-wider">Tactical Habit Protocol</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 px-4 py-2 bg-white/[0.02] border border-white/5 rounded-full">
+                        <Clock className="w-3 h-3 text-accent" />
+                        <span className="text-[9px] font-black uppercase tracking-tighter text-text-dim">
+                          System Hub Updated: <span className="text-white">May 11, 2026 • 19:02 IST</span>
+                        </span>
+                      </div>
+
+                      <div className="text-[9px] font-black uppercase tracking-[0.3em] text-white/20">
+                        © 2026 Neural Grid Labs
+                      </div>
+                    </div>
+                  </footer>
+                </motion.div>
               )}
-            </main>
-
-            <footer className="max-w-screen-2xl mx-auto px-8 py-12 pb-32 border-t border-white/[0.03] opacity-40">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center">
-                    <Shield className="w-4 h-4 text-accent" />
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-black uppercase tracking-widest text-white">Iron Circle</div>
-                    <div className="text-[8px] font-medium text-text-dim uppercase tracking-wider">Tactical Habit Protocol</div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 px-4 py-2 bg-white/[0.02] border border-white/5 rounded-full">
-                  <Clock className="w-3 h-3 text-accent" />
-                  <span className="text-[9px] font-black uppercase tracking-tighter text-text-dim">
-                    System Hub Updated: <span className="text-white">May 11, 2026 • 19:02 IST</span>
-                  </span>
-                </div>
-
-                <div className="text-[9px] font-black uppercase tracking-[0.3em] text-white/20">
-                  © 2026 Neural Grid Labs
-                </div>
-              </div>
-            </footer>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </AnimatePresence>
+          } />
+        </Routes>
 
       {/* Delete Account Modal */}
       <AnimatePresence>

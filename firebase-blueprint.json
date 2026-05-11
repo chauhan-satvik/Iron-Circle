@@ -49,6 +49,18 @@
         "xpEarned": { "type": "number" }
       },
       "required": ["date", "completions", "xpEarned"]
+    },
+    "FocusSession": {
+      "title": "FocusSession",
+      "description": "A focused work session record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "duration": { "type": "number" },
+        "xpEarned": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "duration", "xpEarned", "createdAt"]
     }
   },
   "firestore": {
@@ -67,6 +79,10 @@
     "/groups/{groupId}/users/{userId}/completions/{date}": {
       "schema": "DailyCompletions",
       "description": "Daily habit completion logs within a group"
+    },
+    "/groups/{groupId}/users/{userId}/focusSessions/{sessionId}": {
+      "schema": "FocusSession",
+      "description": "User's focus session logs"
     }
   }
 }
