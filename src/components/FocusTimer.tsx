@@ -11,6 +11,16 @@ import {
   runTransaction,
   updateDoc
 } from 'firebase/firestore';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  ResponsiveContainer, 
+  Cell,
+  Legend
+} from 'recharts';
 import { db, auth } from '../firebase';
 import { FocusSession, UserProfile } from '../types';
 import { 
@@ -24,11 +34,13 @@ import {
   History,
   Zap,
   Settings,
-  Save
+  Save,
+  X,
+  Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import { format } from 'date-fns';
+import { format, subDays, parseISO } from 'date-fns';
 import { useTimerStore } from '../lib/timerStore';
 
 interface FocusTimerProps {
@@ -55,9 +67,15 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
   const [breakDuration, setBreakDuration] = useState(profile.defaultBreakDuration || 5);
   const [timeLeft, setTimeLeft] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [offlineDuration, setOfflineDuration] = useState(25);
+  const [offlineSubject, setOfflineSubject] = useState('');
+  const [offlineNotes, setOfflineNotes] = useState('');
+  const [isSavingOffline, setIsSavingOffline] = useState(false);
   const [sessions, setSessions] = useState<FocusSession[]>([]);
-  const [todayStats, setTodayStats] = useState({ count: 0, minutes: 0 });
+  const [todayStats, setTodayStats] = useState({ count: 0, minutes: 0, trackedMinutes: 0, offlineMinutes: 0 });
+  const [weeklyFocusData, setWeeklyFocusData] = useState<{ date: string; tracked: number; offline: number }[]>([]);
 
   const FOCUS_TIME = focusDuration * 60;
   const BREAK_TIME = breakDuration * 60;
@@ -91,22 +109,42 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
 
     const focusRef = collection(db, 'groups', profile.groupId, 'users', auth.currentUser.uid, 'focusSessions');
     const todayStr = format(today, 'yyyy-MM-dd');
+    const sevenDaysAgo = format(subDays(today, 6), 'yyyy-MM-dd');
     
+    // Get last 7 days of sessions for the chart
     const q = query(
       focusRef,
-      where('date', '==', todayStr),
+      where('date', '>=', sevenDaysAgo),
+      orderBy('date', 'asc'),
       orderBy('createdAt', 'desc')
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as FocusSession));
-      setSessions(docs);
+      const todayDocs = docs.filter(s => s.date === todayStr);
+      setSessions(todayDocs);
       
-      const totalMinutes = docs.reduce((acc, s) => acc + (s.completed ? s.duration : 0), 0);
+      const trackedMinutes = todayDocs.filter(s => s.source !== 'offline' && s.completed).reduce((acc, s) => acc + s.duration, 0);
+      const offlineMinutes = todayDocs.filter(s => s.source === 'offline' && s.completed).reduce((acc, s) => acc + s.duration, 0);
+      
       setTodayStats({
-        count: docs.filter(d => d.completed).length,
-        minutes: totalMinutes
+        count: todayDocs.filter(d => d.completed && d.source !== 'offline').length,
+        minutes: trackedMinutes + offlineMinutes,
+        trackedMinutes,
+        offlineMinutes
       });
+
+      // Prepare weekly chart data
+      const last7Days = Array.from({ length: 7 }, (_, i) => format(subDays(today, 6 - i), 'yyyy-MM-dd'));
+      const weeklyData = last7Days.map(date => {
+        const dayDocs = docs.filter(s => s.date === date && s.completed);
+        return {
+          date: format(parseISO(date), 'EEE'),
+          tracked: dayDocs.filter(s => s.source !== 'offline').reduce((acc, s) => acc + s.duration, 0),
+          offline: dayDocs.filter(s => s.source === 'offline').reduce((acc, s) => acc + s.duration, 0)
+        };
+      });
+      setWeeklyFocusData(weeklyData as any);
     });
 
     return () => unsubscribe();
@@ -176,6 +214,8 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
             duration: durationInMinutes,
             date: format(today, 'yyyy-MM-dd'),
             completed: true,
+            source: 'timer',
+            rewardEligible: true,
             createdAt: Date.now()
           });
 
@@ -269,10 +309,42 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
 
   const focusLabel = getFocusLabel();
 
+  const handleSaveOffline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth.currentUser || offlineDuration < 1 || offlineDuration > 720) return;
+    
+    setIsSavingOffline(true);
+    try {
+      const userId = auth.currentUser.uid;
+      const focusRef = collection(db, 'groups', profile.groupId, 'users', userId, 'focusSessions');
+      
+      await addDoc(focusRef, {
+        userId,
+        duration: offlineDuration,
+        date: format(today, 'yyyy-MM-dd'),
+        completed: true,
+        source: 'offline',
+        rewardEligible: false,
+        subject: offlineSubject,
+        notes: offlineNotes,
+        createdAt: Date.now()
+      });
+      
+      setShowOfflineModal(false);
+      setOfflineSubject('');
+      setOfflineNotes('');
+      setOfflineDuration(25);
+    } catch (error) {
+      console.error("Error saving offline focus:", error);
+    } finally {
+      setIsSavingOffline(false);
+    }
+  };
+
   return (
     <div className="min-h-[calc(100vh-120px)] flex flex-col items-center justify-center py-8">
       {/* Configuration Hub Toggle */}
-      <div className="mb-8 flex flex-col items-center">
+      <div className="mb-8 flex flex-col sm:flex-row items-center gap-4">
         <button 
           onClick={() => setShowSettings(!showSettings)}
           className={cn(
@@ -282,6 +354,14 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
         >
           <Settings className={cn("w-4 h-4 transition-transform duration-700", showSettings && "rotate-180")} />
           <span className="text-[9px] font-black uppercase tracking-[0.3em]">Configure Sequence</span>
+        </button>
+
+        <button 
+          onClick={() => setShowOfflineModal(true)}
+          className="flex items-center gap-3 px-8 py-3 rounded-2xl bg-white/[0.05] hover:bg-white/10 border border-white/5 text-text-dim hover:text-white transition-all duration-300"
+        >
+          <History className="w-4 h-4" />
+          <span className="text-[9px] font-black uppercase tracking-[0.3em]">Log Offline Focus</span>
         </button>
       </div>
 
@@ -375,6 +455,107 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
               </div>
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showOfflineModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowOfflineModal(false)}
+              className="absolute inset-0 bg-bg-main/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-lg glass-card rounded-[3rem] p-8 sm:p-12 border-white/10 shadow-2xl overflow-hidden"
+            >
+              <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:20px_20px]" />
+              
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white">Log Offline Focus</h2>
+                    <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">Manual Intelligence Entry • Non-XP</p>
+                  </div>
+                  <button onClick={() => setShowOfflineModal(false)} className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 text-white/40 transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveOffline} className="space-y-6">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-white/40 uppercase tracking-widest pl-2">Session Duration (MINUTES)</label>
+                    <div className="relative group">
+                      <Timer className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-dim group-focus-within:text-accent transition-colors" />
+                      <input 
+                        type="number"
+                        min="1"
+                        max="720"
+                        value={offlineDuration}
+                        onChange={(e) => setOfflineDuration(parseInt(e.target.value) || 1)}
+                        className="w-full bg-white/[0.03] border border-white/5 rounded-2xl pl-14 pr-6 py-4 text-white font-black text-sm focus:border-accent/40 focus:ring-4 focus:ring-accent/5 transition-all outline-none"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-white/40 uppercase tracking-widest pl-2">Sector / Subject (OPTIONAL)</label>
+                    <div className="relative group">
+                      <Brain className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-dim group-focus-within:text-accent transition-colors" />
+                      <input 
+                        type="text"
+                        placeholder="e.g. Physics, Coding, Analysis"
+                        value={offlineSubject}
+                        onChange={(e) => setOfflineSubject(e.target.value)}
+                        className="w-full bg-white/[0.03] border border-white/5 rounded-2xl pl-14 pr-6 py-4 text-white font-bold placeholder:text-white/10 focus:border-accent/40 focus:ring-4 focus:ring-accent/5 transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-white/40 uppercase tracking-widest pl-2">Neural Notes (OPTIONAL)</label>
+                    <textarea 
+                      placeholder="Summary of deep work protocol..."
+                      value={offlineNotes}
+                      onChange={(e) => setOfflineNotes(e.target.value)}
+                      rows={3}
+                      className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-6 py-4 text-white font-medium placeholder:text-white/10 focus:border-accent/40 focus:ring-4 focus:ring-accent/5 transition-all outline-none resize-none"
+                    />
+                  </div>
+
+                  <div className="pt-4 flex items-center gap-4">
+                    <button 
+                      type="button"
+                      onClick={() => setShowOfflineModal(false)}
+                      className="flex-1 py-4 bg-white/5 text-text-dim font-black rounded-2xl uppercase tracking-widest hover:bg-white/10 transition-all border border-white/5"
+                    >
+                      Abort
+                    </button>
+                    <button 
+                      type="submit"
+                      disabled={isSavingOffline}
+                      className="flex-[2] py-4 bg-accent text-white font-black rounded-2xl uppercase tracking-widest hover:scale-[1.02] active:scale-95 shadow-2xl transition-all disabled:opacity-50"
+                    >
+                      {isSavingOffline ? 'Establishing Link...' : 'Save Session'}
+                    </button>
+                  </div>
+                </form>
+                
+                <div className="mt-8 p-4 bg-accent/5 border border-accent/10 rounded-2xl flex items-start gap-4">
+                  <Activity className="w-5 h-5 text-accent shrink-0 mt-1" />
+                  <p className="text-[9px] font-medium leading-relaxed text-text-dim/60 uppercase tracking-wider">
+                    Note: Offline sessions contribute to personal study metrics but do not yield competitive XP or affect leaderboard positioning.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -542,24 +723,123 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
           </div>
         </div>
 
+        {/* Personal Focus Matrix - Weekly Chart */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-16 w-full glass-card rounded-[3rem] p-8 sm:p-12 border-white/5 relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-64 h-64 bg-accent/5 blur-[80px] rounded-full -mr-20 -mt-20" />
+          
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 mb-10 relative z-10">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Brain className="w-4 h-4 text-accent" />
+                <span className="text-[10px] font-black text-text-dim uppercase tracking-[0.3em]">Personal Focus Matrix</span>
+              </div>
+              <h3 className="text-3xl font-black text-white italic tracking-tighter uppercase">Weekly Output</h3>
+            </div>
+            
+            <div className="flex items-center gap-6">
+               <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-accent" />
+                  <span className="text-[9px] font-black text-text-dim uppercase tracking-widest">Tracked</span>
+               </div>
+               <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-white/20" />
+                  <span className="text-[9px] font-black text-text-dim uppercase tracking-widest">Offline</span>
+               </div>
+            </div>
+          </div>
+
+          <div className="h-[300px] w-full relative z-10">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weeklyFocusData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                <XAxis 
+                  dataKey="date" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: 'rgba(255,255,255,0.2)', fontSize: 10, fontWeight: 900 }} 
+                  dy={10}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: 'rgba(255,255,255,0.2)', fontSize: 10, fontWeight: 900 }}
+                />
+                <Tooltip 
+                  cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                  contentStyle={{ 
+                    backgroundColor: '#0A0A0A', 
+                    border: '1px solid rgba(255,255,255,0.1)', 
+                    borderRadius: '16px',
+                    fontSize: '12px',
+                    fontWeight: 900,
+                    textTransform: 'uppercase',
+                    boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
+                  }}
+                />
+                <Bar 
+                  dataKey="tracked" 
+                  stackId="a" 
+                  fill="#3B82F6" 
+                  radius={[0, 0, 0, 0]} 
+                  barSize={40}
+                />
+                <Bar 
+                  dataKey="offline" 
+                  stackId="a" 
+                  fill="rgba(255,255,255,0.1)" 
+                  radius={[8, 8, 0, 0]} 
+                  barSize={40}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
+
         {/* Supporting Footer Section */}
         <div className="mt-12 flex flex-col sm:flex-row items-center justify-between gap-8 opacity-40 hover:opacity-100 transition-opacity duration-500">
            <div className="flex items-center gap-3">
               <History className="w-4 h-4" />
-              <div className="flex gap-4">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4">
                  {sessions.slice(0, 3).map((s) => (
-                    <div key={s.id} className="flex items-center gap-2">
+                    <div 
+                      key={s.id} 
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/5",
+                        s.source === 'offline' && "opacity-60 bg-white/[0.02]"
+                      )}
+                    >
                        <span className="text-[10px] font-black text-white">{s.duration}M</span>
-                       <span className="text-[8px] font-black uppercase tracking-tighter">{format(s.createdAt, 'HH:mm')}</span>
+                       <div className="w-1 h-1 rounded-full bg-white/20 whitespace-nowrap" />
+                       <span className="text-[8px] font-black uppercase tracking-tighter whitespace-nowrap">
+                         {s.source === 'offline' ? 'OFFLINE' : format(s.createdAt, 'HH:mm')}
+                       </span>
                     </div>
                  ))}
               </div>
            </div>
            
-           <div className="flex items-center gap-3">
-              <Zap className="w-4 h-4 text-accent fill-current" />
-              <div className="text-[10px] font-black uppercase tracking-widest italic">
-                Daily Focus: {todayStats.minutes}M / {todayStats.count} Cycles
+           <div className="flex items-center gap-6">
+              <div className="flex items-center gap-3 bg-accent/5 px-4 py-2 rounded-xl border border-accent/10">
+                <Zap className="w-4 h-4 text-accent fill-current animate-pulse" />
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white italic">
+                    {(todayStats as any).trackedMinutes || 0}M Tracked
+                  </span>
+                  <span className="text-[7px] text-text-dim font-black uppercase tracking-widest">Active Focus Protocol</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/5">
+                <History className="w-4 h-4 text-text-dim" />
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-text-dim/80 italic">
+                    {(todayStats as any).offlineMinutes || 0}M Offline
+                  </span>
+                  <span className="text-[7px] text-text-dim/40 font-black uppercase tracking-widest">Manual Intelligence</span>
+                </div>
               </div>
            </div>
         </div>

@@ -61,5 +61,9 @@ export interface FocusSession {
   duration: number; // minutes
   date: string; // YYYY-MM-DD
   completed: boolean;
+  source?: 'timer' | 'offline';
+  rewardEligible?: boolean;
+  subject?: string;
+  notes?: string;
   createdAt: number;
 }

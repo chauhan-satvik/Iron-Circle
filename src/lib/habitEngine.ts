@@ -155,7 +155,8 @@ export function calculateUserXP(habits: Habit[], focusSessions: FocusSession[]):
 
   // Focus Session XP
   focusSessions.forEach(session => {
-    if (session.completed) {
+    // Only timer sessions that are completed and reward eligible grant XP
+    if (session.completed && session.rewardEligible !== false && session.source !== 'offline') {
       total += (session.duration * 2);
     }
   });
