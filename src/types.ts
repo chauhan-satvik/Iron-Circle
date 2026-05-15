@@ -32,6 +32,11 @@ export interface UserProfile {
   bio?: string;
   status?: string;
   mood?: string;
+  github?: string;
+  instagram?: string;
+  twitter?: string;
+  website?: string;
+  discord?: string;
   lastActive: number;
   groupId: string;
   defaultFocusDuration?: number;

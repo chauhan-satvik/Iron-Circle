@@ -21,11 +21,12 @@ import {
   Globe,
   Edit2
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 
 const PREDEFINED_AVATARS = [
   '⚡', '🛡️', '🧠', '⚔️', '🔮', '🧬', '🌌', '🌋', '🌊', '🌪️', '🦾', '👾', '🚀', '🔭', '📡', '💎', '🔥', '☄️',
-  '🦁', '🦅', '🐺', '🐍', '🐉', '🐙', '🦖', '🦄', '🎭', '🎨', '🎬', '🎹', '🎮', '🕹️', '💻', '🔋', '🔌', '📡'
+  '🦁', '🦅', '🐺', '🐍', '🐉', '🐙', '🦖', '🦄', '🎭', '🎨', '🎬', '🎹', '🎮', '🕹️', '💻', '🔋', '🔌'
 ];
 
 const MOODS = ['🔥', '🧘', '🚀', '🛠️', '💤', '📈', '📉', '🌪️', '🛡️', '🎯', '🧪', '👾'];
@@ -57,6 +58,7 @@ export default function ProfilePanel({
   onLogout, 
   onDeleteRequested 
 }: ProfilePanelProps) {
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(profile.displayName);
   const [tempUsername, setTempUsername] = useState(profile.username);
@@ -169,6 +171,20 @@ export default function ProfilePanel({
                 {profile.bio && (
                   <p className="text-sm text-text-dim max-w-xs mx-auto leading-relaxed">{profile.bio}</p>
                 )}
+
+                <button 
+                  onClick={() => {
+                    navigate(`/profile/${profile.uid}`);
+                    onClose();
+                  }}
+                  className="w-full flex items-center justify-between px-6 py-4 bg-accent/10 border border-accent/20 rounded-2xl group hover:bg-accent hover:text-white transition-all text-accent"
+                >
+                  <div className="flex items-center gap-3">
+                    <User className="w-4 h-4" />
+                    <span className="text-[10px] font-black uppercase tracking-widest leading-none">View Public Profile</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                </button>
               </div>
 
               {/* Stats Grid */}

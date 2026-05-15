@@ -34,6 +34,7 @@ import HelpTour from './HelpTour';
 import AdminLogin from './admin/AdminLogin';
 import AdminPanel from './admin/AdminPanel';
 import { SystemInfo } from './SystemInfo';
+import ProfilePage from './ProfilePage';
 import { calculateUserXP, calculateGlobalStreak } from '../lib/habitEngine';
 import { LogIn, LogOut, Shield, Trash2, X, AlertTriangle, User as UserIcon, Hash, Palette, Flame, LayoutDashboard, Timer, Clock, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -535,6 +536,7 @@ export default function AuthWrapper() {
                         <Routes>
                           <Route path="/" element={<WeeklyDashboard profile={profile} today={today} />} />
                           <Route path="/focus" element={<FocusTimer profile={profile} today={today} />} />
+                          <Route path="/profile/:uid" element={<ProfilePage />} />
                         </Routes>
                         <Navigation />
                         <ProfilePanel 

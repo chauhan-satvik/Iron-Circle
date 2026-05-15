@@ -16,6 +16,7 @@ import { cn, getDaysOfWeek } from '../lib/utils';
 import Avatar from './Avatar';
 import { format, startOfDay } from 'date-fns';
 
+import { useNavigate } from 'react-router-dom';
 import { calculateUserXP, calculateWeeklyConsistency, calculateGlobalStreak } from '../lib/habitEngine';
 
 interface LeaderboardProps {
@@ -30,6 +31,7 @@ interface UserState {
 }
 
 export default function Leaderboard({ groupId, today }: LeaderboardProps) {
+  const navigate = useNavigate();
   const [userStates, setUserStates] = useState<Record<string, UserState>>({});
   const [loading, setLoading] = useState(true);
   const currentWeekDays = useMemo(() => getDaysOfWeek(today), [today]);
@@ -191,11 +193,12 @@ export default function Leaderboard({ groupId, today }: LeaderboardProps) {
                   layout
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
+                  onClick={() => navigate(`/profile/${entry.uid}`)}
                   className={cn(
-                    "relative group rounded-[2rem] border transition-all duration-700 p-5",
+                    "relative group rounded-[2rem] border transition-all duration-700 p-5 cursor-pointer",
                     isRank1 
-                      ? "bg-accent/[0.08] border-accent/40 shadow-[0_20px_50px_rgba(59,130,246,0.15)] shadow-accent/5" 
-                      : "bg-white/[0.02] border-white/5 hover:border-accent/30"
+                      ? "bg-accent/[0.08] border-accent/40 shadow-[0_20px_50px_rgba(59,130,246,0.15)] shadow-accent/5 hover:bg-accent/[0.12]" 
+                      : "bg-white/[0.02] border-white/5 hover:border-accent/30 hover:bg-white/[0.05]"
                   )}
                 >
                   {isRank1 && (
@@ -258,7 +261,11 @@ export default function Leaderboard({ groupId, today }: LeaderboardProps) {
             {others.map((entry, index) => {
               const rank = index + 4;
               return (
-                <div key={entry.uid} className="relative group flex flex-col sm:flex-row items-center gap-4 p-4 bg-white/[0.01] border border-white/5 rounded-2xl hover:bg-white/[0.03] transition-all">
+                <div 
+                  key={entry.uid} 
+                  onClick={() => navigate(`/profile/${entry.uid}`)}
+                  className="relative group flex flex-col sm:flex-row items-center gap-4 p-4 bg-white/[0.01] border border-white/5 rounded-2xl hover:bg-white/[0.03] transition-all cursor-pointer hover:border-white/10"
+                >
                   <div className="flex items-center w-full sm:w-auto gap-4">
                     <span className="w-4 text-[10px] font-black text-text-dim/10 italic shrink-0">{rank}</span>
                     <Avatar avatar={entry.avatar} name={entry.displayName || entry.name} mood={entry.mood} size="md" />

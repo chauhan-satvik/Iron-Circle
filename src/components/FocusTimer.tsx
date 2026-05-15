@@ -767,7 +767,7 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
                   <span className="text-[9px] font-black text-text-dim uppercase tracking-widest">Tracked</span>
                </div>
                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-white/20" />
+                  <div className="w-2 h-2 rounded-full bg-violet-500" />
                   <span className="text-[9px] font-black text-text-dim uppercase tracking-widest">Offline</span>
                </div>
             </div>
@@ -810,9 +810,10 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
                 <Bar 
                   dataKey="offline" 
                   stackId="a" 
-                  fill="rgba(255,255,255,0.1)" 
+                  fill="#8B5CF6" 
                   radius={[8, 8, 0, 0]} 
                   barSize={40}
+                  opacity={0.8}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -825,11 +826,13 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
               <History className="w-4 h-4" />
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4">
                  {sessions.slice(0, 3).map((s) => (
-                    <div 
+                     <div 
                       key={s.id} 
                       className={cn(
-                        "flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/5",
-                        s.source === 'offline' && "opacity-60 bg-white/[0.02]"
+                        "flex items-center gap-2 px-3 py-1 rounded-full border transition-all hover:scale-105",
+                        s.source === 'offline' 
+                          ? "bg-violet-500/10 border-violet-500/20 text-violet-400" 
+                          : "bg-white/5 border-white/5 text-white"
                       )}
                     >
                        <span className="text-[10px] font-black text-white">{s.duration}M</span>
@@ -853,13 +856,13 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/5">
-                <History className="w-4 h-4 text-text-dim" />
+              <div className="flex items-center gap-3 bg-violet-500/5 px-4 py-2 rounded-xl border border-violet-500/10 group hover:bg-violet-500/10 transition-colors">
+                <History className="w-4 h-4 text-violet-400/60 group-hover:text-violet-400 transition-colors" />
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-text-dim/80 italic">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-violet-400 italic">
                     {(todayStats as any).offlineMinutes || 0}M Offline
                   </span>
-                  <span className="text-[7px] text-text-dim/40 font-black uppercase tracking-widest">Manual Intelligence</span>
+                  <span className="text-[7px] text-violet-400/40 font-black uppercase tracking-widest">Manual Intelligence</span>
                 </div>
               </div>
            </div>

@@ -5,7 +5,7 @@ import { UserProfile } from '../types';
 interface AvatarProps {
   avatar?: UserProfile['avatar'];
   name?: string;
-  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   className?: string;
   showStatus?: boolean;
   isOnline?: boolean;
@@ -27,6 +27,7 @@ export default function Avatar({
     md: 'w-10 h-10 text-xs',
     lg: 'w-14 h-14 text-base',
     xl: 'w-20 h-20 text-2xl',
+    '2xl': 'w-32 h-32 text-4xl',
   };
 
   const initials = typeof name === 'string' && name.trim()
