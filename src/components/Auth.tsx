@@ -33,6 +33,7 @@ import ProfilePanel from './ProfilePanel';
 import HelpTour from './HelpTour';
 import AdminLogin from './admin/AdminLogin';
 import AdminPanel from './admin/AdminPanel';
+import { SystemInfo } from './SystemInfo';
 import { calculateUserXP, calculateGlobalStreak } from '../lib/habitEngine';
 import { LogIn, LogOut, Shield, Trash2, X, AlertTriangle, User as UserIcon, Hash, Palette, Flame, LayoutDashboard, Timer, Clock, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -561,23 +562,18 @@ export default function AuthWrapper() {
                   </main>
 
                   <footer className="max-w-screen-2xl mx-auto px-8 py-12 pb-32 border-t border-white/[0.03] opacity-40">
-                    <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-8">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center">
                           <Shield className="w-4 h-4 text-accent" />
                         </div>
                         <div>
-                          <div className="text-[10px] font-black uppercase tracking-widest text-white">Iron Circle</div>
+                          <div className="text-[10px] font-black uppercase tracking-widest text-white">Iron Circle <span className="text-accent/50 ml-1">v2.0</span></div>
                           <div className="text-[8px] font-medium text-text-dim uppercase tracking-wider">Tactical Habit Protocol</div>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 px-4 py-2 bg-white/[0.02] border border-white/5 rounded-full">
-                        <Clock className="w-3 h-3 text-accent" />
-                        <span className="text-[9px] font-black uppercase tracking-tighter text-text-dim">
-                          System Hub Updated: <span className="text-white">May 11, 2026 • 19:02 IST</span>
-                        </span>
-                      </div>
+                      <SystemInfo />
 
                       <div className="text-[9px] font-black uppercase tracking-[0.3em] text-white/20">
                         © 2026 Neural Grid Labs

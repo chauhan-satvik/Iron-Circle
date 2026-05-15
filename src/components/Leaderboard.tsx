@@ -70,7 +70,9 @@ export default function Leaderboard({ groupId, today }: LeaderboardProps) {
 
           // Set up focus sessions listener
           const focusRef = collection(db, 'groups', groupId, 'users', uid, 'focusSessions');
-          const focusUnsub = onSnapshot(focusRef, (s) => {
+          // Important: Query only non-offline sessions to avoid permission errors and preserve privacy
+          const focusQuery = query(focusRef, where('source', '!=', 'offline'));
+          const focusUnsub = onSnapshot(focusQuery, (s) => {
             const focusSessions = s.docs.map(d => ({ id: d.id, ...d.data() } as FocusSession));
             setUserStates(prev => {
               if (!prev[uid]) return prev;

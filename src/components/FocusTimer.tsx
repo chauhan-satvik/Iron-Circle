@@ -69,10 +69,11 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [offlineDuration, setOfflineDuration] = useState(25);
+  const [offlineDuration, setOfflineDuration] = useState<string | number>(25);
   const [offlineSubject, setOfflineSubject] = useState('');
   const [offlineNotes, setOfflineNotes] = useState('');
   const [isSavingOffline, setIsSavingOffline] = useState(false);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<FocusSession[]>([]);
   const [todayStats, setTodayStats] = useState({ count: 0, minutes: 0, trackedMinutes: 0, offlineMinutes: 0 });
   const [weeklyFocusData, setWeeklyFocusData] = useState<{ date: string; tracked: number; offline: number }[]>([]);
@@ -311,7 +312,14 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
 
   const handleSaveOffline = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth.currentUser || offlineDuration < 1 || offlineDuration > 720) return;
+    setOfflineError(null);
+    
+    const durationVal = typeof offlineDuration === 'string' ? parseFloat(offlineDuration) : offlineDuration;
+    
+    if (!auth.currentUser || isNaN(durationVal) || durationVal <= 0 || durationVal > 720) {
+      setOfflineError("Enter a valid positive number (max 720)");
+      return;
+    }
     
     setIsSavingOffline(true);
     try {
@@ -320,7 +328,7 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
       
       await addDoc(focusRef, {
         userId,
-        duration: offlineDuration,
+        duration: durationVal,
         date: format(today, 'yyyy-MM-dd'),
         completed: true,
         source: 'offline',
@@ -336,6 +344,7 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
       setOfflineDuration(25);
     } catch (error) {
       console.error("Error saving offline focus:", error);
+      setOfflineError("Protocol error: Failed to save session.");
     } finally {
       setIsSavingOffline(false);
     }
@@ -494,14 +503,26 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
                       <Timer className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-dim group-focus-within:text-accent transition-colors" />
                       <input 
                         type="number"
-                        min="1"
+                        step="any"
                         max="720"
                         value={offlineDuration}
-                        onChange={(e) => setOfflineDuration(parseInt(e.target.value) || 1)}
-                        className="w-full bg-white/[0.03] border border-white/5 rounded-2xl pl-14 pr-6 py-4 text-white font-black text-sm focus:border-accent/40 focus:ring-4 focus:ring-accent/5 transition-all outline-none"
+                        onChange={(e) => {
+                          setOfflineDuration(e.target.value);
+                          if (offlineError) setOfflineError(null);
+                        }}
+                        placeholder="Minutes (e.g. 0.5, 45)"
+                        className={cn(
+                          "w-full bg-white/[0.03] border border-white/5 rounded-2xl pl-14 pr-6 py-4 text-white font-black text-sm focus:border-accent/40 focus:ring-4 focus:ring-accent/5 transition-all outline-none",
+                          offlineError && "border-red-500/50 focus:border-red-500/50 focus:ring-red-500/5"
+                        )}
                         required
                       />
                     </div>
+                    {offlineError && (
+                      <p className="text-[9px] font-black text-red-400 uppercase tracking-widest pl-2">
+                        {offlineError}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-3">
