@@ -68,6 +68,7 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
   const [timeLeft, setTimeLeft] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
+  const [showFinishModal, setShowFinishModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [offlineDuration, setOfflineDuration] = useState<string | number>(25);
   const [offlineSubject, setOfflineSubject] = useState('');
@@ -194,6 +195,51 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
     }
   };
 
+  const handleFinishEarly = async () => {
+    const completedSeconds = totalTime - timeLeft;
+    const completedMinutes = Math.floor(completedSeconds / 60);
+    const xpDelta = completedMinutes >= 5 ? completedMinutes * 2 : 0;
+    
+    setIsSaving(true);
+    try {
+      const userId = auth.currentUser!.uid;
+      const focusRef = collection(db, 'groups', profile.groupId, 'users', userId, 'focusSessions');
+      const userRef = doc(db, 'users', userId);
+      const nestedUserRef = doc(db, 'groups', profile.groupId, 'users', userId);
+
+      await runTransaction(db, async (transaction) => {
+        // Save partial session
+        transaction.set(doc(focusRef), {
+          userId: userId,
+          duration: completedMinutes,
+          xpEarned: xpDelta,
+          date: format(today, 'yyyy-MM-dd'),
+          completed: true,
+          completionType: 'partial',
+          source: 'timer',
+          rewardEligible: completedMinutes >= 5,
+          createdAt: Date.now()
+        });
+
+        // Update lastActive
+        const updates = {
+          lastActive: Date.now()
+        };
+
+        transaction.update(userRef, updates);
+        transaction.update(nestedUserRef, updates);
+      });
+
+      resetTimer();
+      setShowFinishModal(false);
+      playTacticalSound('complete');
+    } catch (error) {
+      console.error("Failed to save partial focus session:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleComplete = async () => {
     completeTimer();
     playTacticalSound('complete');
@@ -210,15 +256,17 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
 
         await runTransaction(db, async (transaction) => {
           // Save session
-          transaction.set(doc(focusRef), {
-            userId: userId,
-            duration: durationInMinutes,
-            date: format(today, 'yyyy-MM-dd'),
-            completed: true,
-            source: 'timer',
-            rewardEligible: true,
-            createdAt: Date.now()
-          });
+            transaction.set(doc(focusRef), {
+              userId: userId,
+              duration: durationInMinutes,
+              xpEarned: xpDelta,
+              date: format(today, 'yyyy-MM-dd'),
+              completed: true,
+              completionType: 'full',
+              source: 'timer',
+              rewardEligible: true,
+              createdAt: Date.now()
+            });
 
           // Update lastActive only
           const updates = {
@@ -468,6 +516,68 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
       </AnimatePresence>
 
       <AnimatePresence>
+        {showFinishModal && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowFinishModal(false)}
+              className="absolute inset-0 bg-bg-main/90 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-md glass-card rounded-[3rem] p-8 sm:p-12 border-white/10 shadow-2xl overflow-hidden text-center"
+            >
+              <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:20px_20px]" />
+              
+              <div className="relative z-10 space-y-8">
+                <div>
+                  <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white">Extract Early?</h2>
+                  <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-2">Dossier Closure Protocol</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                    <div className="text-2xl font-black text-white italic">{Math.floor((totalTime - timeLeft) / 60)}M</div>
+                    <div className="text-[8px] font-black text-text-dim uppercase tracking-widest mt-1">Focused</div>
+                  </div>
+                  <div className="bg-accent/10 p-6 rounded-3xl border border-accent/20">
+                    <div className="text-2xl font-black text-accent italic">+{Math.floor((totalTime - timeLeft) / 60) >= 5 ? Math.floor((totalTime - timeLeft) / 60) * 2 : 0} XP</div>
+                    <div className="text-[8px] font-black text-accent uppercase tracking-widest mt-1">Earned</div>
+                  </div>
+                </div>
+
+                {Math.floor((totalTime - timeLeft) / 60) < 5 && (
+                  <p className="text-[9px] font-black text-red-400 uppercase tracking-widest bg-red-400/5 py-2 rounded-lg border border-red-400/10 px-4">
+                    Sessions under 5 minutes yield 0 XP to prevent protocol manipulation.
+                  </p>
+                )}
+
+                <div className="flex flex-col gap-3">
+                  <button 
+                    onClick={handleFinishEarly}
+                    disabled={isSaving}
+                    className="w-full py-4 bg-accent text-white font-black rounded-2xl uppercase tracking-widest hover:scale-[1.02] active:scale-95 shadow-2xl transition-all disabled:opacity-50"
+                  >
+                    {isSaving ? 'Synchronizing...' : 'Finish Session'}
+                  </button>
+                  <button 
+                    onClick={() => setShowFinishModal(false)}
+                    className="w-full py-4 bg-white/5 text-text-dim font-black rounded-2xl uppercase tracking-widest hover:bg-white/10 transition-all border border-white/5"
+                  >
+                    Return to Focus
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {showOfflineModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div
@@ -623,23 +733,33 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
               </div>
             </div>
 
-            <div className="flex flex-col gap-4 w-full max-w-xs lg:max-w-none pt-4">
-              <button
-                onClick={toggleTimer}
-                className={cn(
-                  "w-full px-12 py-6 rounded-3xl flex items-center justify-center gap-4 text-base font-black uppercase tracking-[0.3em] transition-all transform active:scale-95 shadow-[0_20px_50px_rgba(0,0,0,0.3)]",
-                  isRunning 
-                    ? "bg-white/5 border border-white/10 text-white hover:bg-white/10" 
-                    : mode === 'focus' 
-                      ? "bg-accent text-white shadow-[0_15px_40px_rgba(59,130,246,0.3)] hover:shadow-[0_20px_50px_rgba(59,130,246,0.5)]" 
-                      : "bg-emerald-500 text-white shadow-[0_15px_40_rgba(16,185,129,0.3)] hover:shadow-[0_20px_50px_rgba(16,185,129,0.5)]"
+              <div className="flex flex-col gap-4 w-full max-w-xs lg:max-w-none pt-4">
+                <button
+                  onClick={toggleTimer}
+                  className={cn(
+                    "w-full px-12 py-6 rounded-3xl flex items-center justify-center gap-4 text-base font-black uppercase tracking-[0.3em] transition-all transform active:scale-95 shadow-[0_20px_50px_rgba(0,0,0,0.3)]",
+                    isRunning 
+                      ? "bg-white/5 border border-white/10 text-white hover:bg-white/10" 
+                      : mode === 'focus' 
+                        ? "bg-accent text-white shadow-[0_15px_40px_rgba(59,130,246,0.3)] hover:shadow-[0_20px_50px_rgba(59,130,246,0.5)]" 
+                        : "bg-emerald-500 text-white shadow-[0_15px_40_rgba(16,185,129,0.3)] hover:shadow-[0_20px_50px_rgba(16,185,129,0.5)]"
+                  )}
+                >
+                  {isRunning ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current" />}
+                  {isRunning ? "Standby" : "Ignite"}
+                </button>
+
+                {(isRunning || isPaused) && mode === 'focus' && (
+                  <button
+                    onClick={() => setShowFinishModal(true)}
+                    className="w-full px-8 py-4 bg-white/[0.03] hover:bg-white/[0.08] border border-white/5 rounded-2xl text-[10px] font-black uppercase tracking-widest text-text-dim hover:text-white transition-all flex items-center justify-center gap-3"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Finish Session
+                  </button>
                 )}
-              >
-                {isRunning ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current" />}
-                {isRunning ? "Standby" : "Ignite"}
-              </button>
-              
-              <div className="flex items-center justify-between w-full px-2">
+                
+                <div className="flex items-center justify-between w-full px-2">
                 <div className="flex flex-col">
                   <span className="text-[8px] font-black text-text-dim uppercase tracking-widest mb-0.5 opacity-40">Yield</span>
                   <span className="text-sm font-black text-white italic">+{focusDuration * 2} XP</span>
