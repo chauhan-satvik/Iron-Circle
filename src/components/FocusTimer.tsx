@@ -63,8 +63,8 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
     completeTimer
   } = useTimerStore();
 
-  const [focusDuration, setFocusDuration] = useState(profile.defaultFocusDuration || 25);
-  const [breakDuration, setBreakDuration] = useState(profile.defaultBreakDuration || 5);
+  const [focusDuration, setFocusDuration] = useState<string | number>(profile.defaultFocusDuration || 25);
+  const [breakDuration, setBreakDuration] = useState<string | number>(profile.defaultBreakDuration || 5);
   const [timeLeft, setTimeLeft] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
@@ -79,8 +79,8 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
   const [todayStats, setTodayStats] = useState({ count: 0, minutes: 0, trackedMinutes: 0, offlineMinutes: 0 });
   const [weeklyFocusData, setWeeklyFocusData] = useState<{ date: string; tracked: number; offline: number }[]>([]);
 
-  const FOCUS_TIME = focusDuration * 60;
-  const BREAK_TIME = breakDuration * 60;
+  const FOCUS_TIME = (parseFloat(focusDuration.toString()) || 0) * 60;
+  const BREAK_TIME = (parseFloat(breakDuration.toString()) || 0) * 60;
 
   useEffect(() => {
     const updateTimeLeft = () => {
@@ -252,7 +252,7 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
         const userRef = doc(db, 'users', userId);
         const nestedUserRef = doc(db, 'groups', profile.groupId, 'users', userId);
 
-        const xpDelta = durationInMinutes * 2;
+        const xpDelta = durationInMinutes >= 5 ? durationInMinutes * 2 : 0;
 
         await runTransaction(db, async (transaction) => {
           // Save session
@@ -264,7 +264,7 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
               completed: true,
               completionType: 'full',
               source: 'timer',
-              rewardEligible: true,
+              rewardEligible: durationInMinutes >= 5,
               createdAt: Date.now()
             });
 
@@ -295,7 +295,10 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
       resumeTimer();
       playTacticalSound('start');
     } else {
-      startTimer(mode === 'focus' ? FOCUS_TIME : BREAK_TIME, mode);
+      const duration = mode === 'focus' ? FOCUS_TIME : BREAK_TIME;
+      if (duration <= 0 || isNaN(duration)) return;
+      
+      startTimer(duration, mode);
       playTacticalSound('start');
     }
   };
@@ -310,7 +313,13 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
   };
 
   const saveDefaults = async () => {
-    if (!auth.currentUser) return;
+    const focusVal = parseFloat(focusDuration.toString());
+    const breakVal = parseFloat(breakDuration.toString());
+
+    if (isNaN(focusVal) || focusVal <= 0 || isNaN(breakVal) || breakVal <= 0) {
+      return;
+    }
+
     setIsSaving(true);
     try {
       const userId = auth.currentUser.uid;
@@ -318,8 +327,8 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
       const nestedUserRef = doc(db, 'groups', profile.groupId, 'users', userId);
 
       const updates = {
-        defaultFocusDuration: focusDuration,
-        defaultBreakDuration: breakDuration
+        defaultFocusDuration: focusVal,
+        defaultBreakDuration: breakVal
       };
 
       await updateDoc(userRef, updates);
@@ -470,26 +479,27 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
                     </label>
                     <input 
                       type="number"
+                      step="0.01"
                       value={focusDuration}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value) || 1;
-                        setFocusDuration(val);
-                      }}
+                      onChange={(e) => setFocusDuration(e.target.value)}
                       disabled={isRunning || isPaused}
                       className="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-3 text-white font-black text-sm focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-all outline-none disabled:opacity-50"
                     />
+                    {parseFloat(focusDuration.toString()) < 5 && parseFloat(focusDuration.toString()) > 0 && (
+                      <p className="text-[8px] font-black text-text-dim/60 uppercase tracking-wider pl-1">
+                        Sessions below 5 minutes do not reward XP
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-3">
                     <label className="text-[9px] font-black text-white/40 uppercase tracking-widest flex items-center gap-2">
-                      <Coffee className="w-3 h-3 text-emerald-400" /> Break Min
+                       <Coffee className="w-3 h-3 text-emerald-400" /> Break Min
                     </label>
                     <input 
                       type="number"
+                      step="0.01"
                       value={breakDuration}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value) || 1;
-                        setBreakDuration(val);
-                      }}
+                      onChange={(e) => setBreakDuration(e.target.value)}
                       disabled={isRunning || isPaused}
                       className="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-3 text-white font-black text-sm focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 transition-all outline-none disabled:opacity-50"
                     />
@@ -762,7 +772,7 @@ export default function FocusTimer({ profile, today }: FocusTimerProps) {
                 <div className="flex items-center justify-between w-full px-2">
                 <div className="flex flex-col">
                   <span className="text-[8px] font-black text-text-dim uppercase tracking-widest mb-0.5 opacity-40">Yield</span>
-                  <span className="text-sm font-black text-white italic">+{focusDuration * 2} XP</span>
+                  <span className="text-sm font-black text-white italic">+{parseFloat(focusDuration.toString()) >= 5 ? parseFloat(focusDuration.toString()) * 2 : 0} XP</span>
                 </div>
 
                 <button
